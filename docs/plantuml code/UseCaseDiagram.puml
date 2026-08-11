@@ -1,0 +1,60 @@
+@startuml
+title AI-Based Customer Support Automation System - Use Case Diagram
+
+actor Client as C
+actor "Support Agent" as SA
+actor Administrator as A
+actor "External AI Service" as AI
+
+rectangle "AI-Based Customer Support Automation System" {
+
+  usecase "Register Account" as UC1
+  usecase "Login" as UC2
+  usecase "Chat with AI Bot" as UC3
+  usecase "Create Support Ticket" as UC4
+  usecase "View Ticket Status" as UC5
+
+  usecase "Classify Ticket" as UC6
+  usecase "Prioritise Ticket" as UC7
+  usecase "Analyse Sentiment" as UC8
+  usecase "Compute AI Confidence" as UC9
+  usecase "Escalate Ticket to Human Agent" as UC10
+
+  usecase "Manage Escalated Tickets" as UC11
+  usecase "Update Ticket Status & Resolution" as UC12
+
+  usecase "Maintain Knowledge Base" as UC13
+  usecase "View Analytics Dashboard" as UC14
+  usecase "Manage Users and Roles" as UC15
+
+  UC3 --> UC6 : <<include>>
+  UC3 --> UC8 : <<include>>
+  UC3 --> UC9 : <<include>>
+  UC3 --> UC4 : <<extend>>
+  UC4 --> UC6 : <<include>>
+  UC6 --> UC7 : <<include>>
+  UC8 --> UC10 : <<extend>>
+  UC9 --> UC10 : <<extend>>
+}
+
+' Actor associations
+C --> UC1
+C --> UC2
+C --> UC3
+C --> UC4
+C --> UC5
+
+SA --> UC2
+SA --> UC11
+SA --> UC12
+
+A --> UC2
+A --> UC13
+A --> UC14
+A --> UC15
+
+AI --> UC6
+AI --> UC8
+AI --> UC9
+
+@enduml
