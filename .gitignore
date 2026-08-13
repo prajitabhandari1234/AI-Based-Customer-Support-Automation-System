@@ -1,0 +1,14 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+application-local.properties
+
+# Operating System
+.DS_Store
+**/.DS_Store
