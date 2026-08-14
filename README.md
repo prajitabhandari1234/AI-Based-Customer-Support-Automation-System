@@ -86,4 +86,4 @@ The project is currently under development.
 Clone the repository:
 
 ```bash
-git clone <https://github.com/prajitabhandari1234/AI-Based-Customer-Support-Automation-System.git>
+git clone https://github.com/prajitabhandari1234/AI-Based-Customer-Support-Automation-System.git
