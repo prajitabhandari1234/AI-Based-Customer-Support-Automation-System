@@ -1,0 +1,80 @@
+@startuml
+title DFD Level-0 (Simple)\nAI-Based Customer Support Automation System
+left to right direction
+
+' External entities
+actor Client as C
+actor "Support Agent" as SA
+actor Administrator as A
+actor "External AI Service" as AISvc
+
+' Main system process
+rectangle "AI-Based Customer Support\nAutomation System" as System
+
+' Internal data stores
+database "User Data" as D_User
+database "Ticket & Message Data" as D_Ticket
+database "Knowledge Base" as D_KB
+database "Analytics Data" as D_Analytics
+
+' ---- Client data flows ----
+C --> System : Login / Register\nCredentials
+System --> C : Auth result
+
+C --> System : Chat messages,\nSupport enquiries
+System --> C : Chatbot replies,\nTicket status updates
+
+' ---- Support Agent data flows ----
+SA --> System : Login
+System --> SA : Auth result
+
+SA --> System : Ticket updates,\nResolution notes
+System --> SA : Escalated tickets,\nTicket details
+
+' ---- Administrator data flows ----
+A --> System : Login
+System --> A : Auth result
+
+A --> System : Manage users,\nManage knowledge base
+System --> A : Management feedback
+
+A --> System : Request analytics
+System --> A : Dashboard data,\nReports
+
+' ---- External AI Service data flows ----
+System --> AISvc : Text for NLP,\nSentiment, response suggestions
+AISvc --> System : Intent,\nSentiment score,\nAI response,\nConfidence score
+
+' ---- System to data stores ----
+System --> D_User : Store/Retrieve\nuser accounts & roles
+System --> D_Ticket : Store/Retrieve\ntickets & messages
+System --> D_KB : Store/Retrieve\nFAQ entries & templates
+System --> D_Analytics : Store/Retrieve\naggregated metrics
+
+@enduml
+ State Diagram
+@startuml
+title State Machine Diagram - Ticket Lifecycle
+left to right direction
+
+[*] --> New
+
+New --> Classified : AI classifies ticket
+Classified --> Prioritised : Priority assigned
+Prioritised --> Analyzed : Sentiment / confidence checked
+
+Analyzed --> ResolvedByAI : AI solves issue
+Analyzed --> Escalated : Low confidence / negative sentiment / complex issue
+
+ResolvedByAI --> Closed : Client informed
+Escalated --> AssignedToAgent : Ticket sent to support agent
+AssignedToAgent --> InProgress : Agent opens ticket
+InProgress --> WaitingForCustomer : Agent requests more info
+WaitingForCustomer --> InProgress : Customer replies
+InProgress --> Resolved : Agent resolves issue
+Resolved --> Closed : Client informed
+
+Closed --> [*]
+
+@enduml
+ 

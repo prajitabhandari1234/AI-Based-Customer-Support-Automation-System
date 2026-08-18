@@ -1,0 +1,84 @@
+@startuml
+title Deployment Diagram - AI-Based Customer Support Automation System
+
+' ======================
+' Nodes (physical / logical)
+' ======================
+
+node "Client Machine\n(Web Browser)" as ClientNode {
+  artifact "Web Frontend\n(HTML/CSS/JS)" as FrontendArtifact
+}
+
+node "Application Server\n(Spring Boot)" as AppServer {
+  artifact "AI-Based Customer Support\nBackend Application\n(.jar / .war)" as BackendArtifact
+}
+
+node "Database Server\nRDBMS (MySQL/H2)" as DBServer {
+  database "Support Database" as SupportDB
+}
+
+node "External AI Service\n(OpenAI / Gemini API)" as AISvcNode {
+  artifact "AI NLP/Sentiment\nCloud Service" as AISvcArtifact
+}
+
+' ======================
+' Connections
+' ======================
+
+' Client browser to backend over HTTP/HTTPS
+ClientNode --> AppServer : HTTP/HTTPS\nREST API calls\n(/api/auth, /api/chat,\n/api/tickets, /api/analytics)
+
+' Backend to database via JDBC/JPA
+AppServer --> DBServer : JDBC/JPA\n(read/write users,\n tickets, messages,\n knowledge base)
+
+' Backend to external AI service via HTTPS
+AppServer --> AISvcNode : HTTPS\nAPI calls for NLP,\n sentiment, response generation
+
+' ======================
+' Deployment details (notes)
+' ======================
+
+note right of FrontendArtifact
+  - Deployed as static web pages
+  - Technologies: HTML, CSS, JavaScript
+  - Runs in client browser
+end note
+
+note right of BackendArtifact
+  - Java Spring Boot application
+  - Exposes REST APIs:
+    * /api/auth (login/register)
+    * /api/chat (chatbot interaction)
+    * /api/tickets (ticket management)
+    * /api/agent/tickets (agent operations)
+    * /api/kb (knowledge base)
+    * /api/analytics (dashboard data)
+  - Implements business logic for:
+    * Ticket lifecycle
+    * Sentiment & confidence
+    * Escalation rules
+end note
+
+note right of SupportDB
+  - Tables:
+    * User
+    * Ticket
+    * Message
+    * KnowledgeBaseEntry
+    * SystemLog
+  - Stores persistent data:
+    * Accounts & roles
+    * Tickets & conversations
+    * Knowledge base
+    * Logs for monitoring
+end note
+
+note right of AISvcArtifact
+  - Provides AI capabilities:
+    * Natural Language Processing (NLP)
+    * Sentiment Analysis
+    * Response generation
+  - Accessed via API keys and HTTPS
+end note
+
+@enduml

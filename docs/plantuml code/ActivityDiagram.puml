@@ -1,0 +1,80 @@
+@startuml
+title Ticket Lifecycle Activity Diagram - AI-Based Customer Support Automation System
+
+start
+
+' Client submits query via chatbot
+:Client sends message via Chat UI;
+
+' Chatbot tries to answer
+:Chatbot attempts automated response\n(using Knowledge Base / AI);
+
+' Decision: is issue resolved by AI?
+if (Issue resolved by AI?) then (Yes)
+  :Send AI response to client;
+  stop
+else (No)
+  :Create support ticket\n(with client details and message);
+
+  ' Ticket classification & prioritisation
+  :Classify ticket\n(Billing, Technical, Account, etc.);
+  :Assign priority\n(Low / Medium / High / Critical);
+
+  ' Sentiment & confidence analysis
+  :Analyse sentiment\n(Positive / Neutral / Negative);
+  :Compute AI confidence score;
+
+  ' Decision: escalate or keep under AI?
+  if (Negative sentiment\nOR Low confidence?) then (Yes)
+    :Mark ticket as Escalated;
+    :Assign ticket to Support Agent;
+
+    ' Agent handles escalated ticket
+    :Notify agent via dashboard;
+    :Agent reviews conversation history;
+
+    if (Agent needs more info?) then (Yes)
+      :Agent requests clarification\nfrom client;
+      :Client provides additional details;
+      :Update ticket with new information;
+    else (No)
+    endif
+
+    :Agent provides resolution\nand updates ticket status;
+
+    ' Decision: issue resolved?
+    if (Issue resolved?) then (Yes)
+      :Set ticket status = Resolved;
+      :Notify client of resolution;
+      stop
+    else (No)
+      :Set ticket status = On Hold / In Progress;
+      :Continue agent follow-up\nuntil resolved;
+      -[#green]-> :Set ticket status = Resolved;
+      :Notify client of resolution;
+      stop
+    endif
+
+  else (No)
+    ' Ticket kept under AI / low priority
+    :Ticket remains in queue\nfor AI-assisted handling;
+    :Monitor sentiment and activity\n(analytics and reports);
+
+    ' Decision: auto-close or escalate later?
+    if (No further activity\nfor defined period?) then (Auto-close)
+      :Set ticket status = Closed/Resolved;
+      :Notify client if required;
+      stop
+    else (Escalate later)
+      :Escalate ticket based on\nupdated sentiment / priority;
+      :Assign to Support Agent;
+      :Follow agent resolution path\n(as above);
+      -[#green]-> :Set ticket status = Resolved;
+      :Notify client of resolution;
+      stop
+    endif
+
+  endif
+endif
+
+@enduml

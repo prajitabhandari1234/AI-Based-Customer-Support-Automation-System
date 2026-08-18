@@ -1,0 +1,30 @@
+@startuml
+title AI-Based Customer Support Automation System - Context Diagram
+
+actor Client as C
+actor "Support Agent" as SA
+actor Administrator as A
+actor "Business Owner / Company" as BO
+actor "AI Service Provider" as ASP
+
+node "AI-Based Customer Support Automation System" as System {
+  component "Web Frontend\n(Chat UI, Dashboards)" as FE
+  component "Backend API\n(Spring Boot)" as BE
+  database "Support DB" as DB
+}
+
+cloud "External AI Service\n(OpenAI / Gemini API)" as AI
+
+' Connections
+C --> FE : Uses chat and ticket UI
+SA --> FE : Uses agent dashboard
+A --> FE : Uses admin dashboard
+BO --> A : Reviews reports & analytics
+
+FE --> BE : REST API calls
+BE --> DB : Read/Write tickets, users, messages
+BE --> AI : NLP, sentiment, response generation
+
+ASP --> AI : Provides AI models/services
+
+@enduml
