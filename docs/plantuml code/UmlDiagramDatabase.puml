@@ -1,0 +1,103 @@
+@startuml
+title AI-Based Customer Support Automation System - Database ERD
+
+class User {
+    + user_id : BIGINT <<PK>>
+    --
+    name : VARCHAR(100)
+    email : VARCHAR(150) <<UNIQUE>>
+    password_hash : VARCHAR(255)
+    role : ENUM
+    status : ENUM
+    created_at : TIMESTAMP
+}
+
+class Conversation {
+    + conversation_id : BIGINT <<PK>>
+    --
+    customer_id : BIGINT <<FK>>
+    status : ENUM
+    started_at : TIMESTAMP
+    ended_at : TIMESTAMP
+}
+
+class Message {
+    + message_id : BIGINT <<PK>>
+    --
+    conversation_id : BIGINT <<FK>>
+    sender_user_id : BIGINT <<FK, NULLABLE>>
+    sender_type : ENUM
+    content : TEXT
+    sentiment_score : DOUBLE
+    created_at : TIMESTAMP
+}
+
+class Ticket {
+    + ticket_id : BIGINT <<PK>>
+    --
+    conversation_id : BIGINT <<FK>>
+    customer_id : BIGINT <<FK>>
+    assigned_agent_id : BIGINT <<FK, NULLABLE>>
+    category : ENUM
+    priority : ENUM
+    status : ENUM
+    sentiment_score : DOUBLE
+    ai_confidence_score : DOUBLE
+    resolution_notes : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+class KnowledgeBaseEntry {
+    + kb_id : BIGINT <<PK>>
+    --
+    question_pattern : VARCHAR(500)
+    answer_template : TEXT
+    category : VARCHAR(50)
+    last_updated_by : BIGINT <<FK>>
+    last_updated_at : TIMESTAMP
+}
+
+class Notification {
+    + notification_id : BIGINT <<PK>>
+    --
+    user_id : BIGINT <<FK>>
+    ticket_id : BIGINT <<FK>>
+    message : VARCHAR(500)
+    is_read : BOOLEAN
+    created_at : TIMESTAMP
+}
+
+class SystemLog {
+    + log_id : BIGINT <<PK>>
+    --
+    user_id : BIGINT <<FK, NULLABLE>>
+    ticket_id : BIGINT <<FK, NULLABLE>>
+    event_type : VARCHAR(50)
+    description : TEXT
+    created_at : TIMESTAMP
+}
+
+User "1" -- "0..*" Conversation : customer_id
+
+Conversation "1" -- "0..*" Message : conversation_id
+
+Conversation "1" -- "0..1" Ticket : conversation_id
+
+User "1" -- "0..*" Ticket : customer_id
+
+User "0..1" -- "0..*" Ticket : assigned_agent_id
+
+User "0..1" -- "0..*" Message : sender_user_id
+
+User "1" -- "0..*" KnowledgeBaseEntry : last_updated_by
+
+User "1" -- "0..*" Notification : user_id
+
+Ticket "1" -- "0..*" Notification : ticket_id
+
+User "0..1" -- "0..*" SystemLog : user_id
+
+Ticket "0..1" -- "0..*" SystemLog : ticket_id
+
+@enduml

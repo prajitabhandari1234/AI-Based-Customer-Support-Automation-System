@@ -1,0 +1,39 @@
+@startuml
+title AI Chatbot Interaction and Ticket Escalation - Sequence Diagram
+
+actor Client as C
+participant ChatUI
+participant ChatbotService
+participant TicketService
+participant KnowledgeBaseService as KBService
+participant AISvc as "External AI Service"
+participant SupportAgent as SA
+
+C -> ChatUI : Enter question\n"Where is my order?"
+ChatUI -> ChatbotService : POST /api/chat\nclientMessage
+
+ChatbotService -> KBService : findMatchingEntry(messageContent)
+KBService --> ChatbotService : kbEntry or null
+
+alt KB entry found
+  ChatbotService -> ChatbotService : generateResponseUsingTemplate(kbEntry)
+  ChatbotService -> ChatUI : AI Response\n"Your order status is..."
+else KB entry not found
+  ChatbotService -> AISvc : analyseIntentAndSentiment(messageContent)
+  AISvc --> ChatbotService : intent, sentimentScore, confidenceScore
+
+  ChatbotService -> ChatbotService : decide(response or escalate)
+
+  alt confidenceScore >= threshold and sentiment positive/neutral
+    ChatbotService -> ChatbotService : generateResponseUsingAI(intent)
+    ChatbotService -> ChatUI : AI Response\n"Here is the information..."
+  else
+    ChatbotService -> TicketService : createTicket(customerId, messageContent, sentimentScore, confidenceScore)
+    TicketService --> ChatbotService : ticketId
+
+    ChatbotService -> ChatUI : Response\n"Your issue has been escalated to our support team."
+    TicketService -> SA : Notify new escalated ticket\n(ticketId)
+  end
+end
+
+@enduml

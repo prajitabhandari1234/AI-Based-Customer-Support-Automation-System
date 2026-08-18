@@ -1,0 +1,24 @@
+@startuml
+title State Machine Diagram - Ticket Lifecycle
+left to right direction
+
+[*] --> New
+
+New --> Classified : AI classifies ticket
+Classified --> Prioritised : Priority assigned
+Prioritised --> Analyzed : Sentiment / confidence checked
+
+Analyzed --> ResolvedByAI : AI solves issue
+Analyzed --> Escalated : Low confidence / negative sentiment / complex issue
+
+ResolvedByAI --> Closed : Client informed
+Escalated --> AssignedToAgent : Ticket sent to support agent
+AssignedToAgent --> InProgress : Agent opens ticket
+InProgress --> WaitingForCustomer : Agent requests more info
+WaitingForCustomer --> InProgress : Customer replies
+InProgress --> Resolved : Agent resolves issue
+Resolved --> Closed : Client informed
+
+Closed --> [*]
+
+@enduml

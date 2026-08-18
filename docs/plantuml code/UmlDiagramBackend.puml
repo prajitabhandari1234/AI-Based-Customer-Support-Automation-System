@@ -1,0 +1,236 @@
+@startuml
+title AI-Based Customer Support Automation System - Backend Class Diagram
+
+class User {
+    - Long userId
+    - String name
+    - String email
+    - String passwordHash
+    - UserRole role
+    - UserStatus status
+    - LocalDateTime createdAt
+}
+
+enum UserRole {
+    CUSTOMER
+    SUPPORT_AGENT
+    ADMIN
+}
+
+enum UserStatus {
+    ACTIVE
+    INACTIVE
+}
+
+class Conversation {
+    - Long conversationId
+    - User customer
+    - ConversationStatus status
+    - LocalDateTime startedAt
+    - LocalDateTime endedAt
+}
+
+enum ConversationStatus {
+    ACTIVE
+    COMPLETED
+    ESCALATED
+}
+
+class Message {
+    - Long messageId
+    - Conversation conversation
+    - User senderUser
+    - SenderType senderType
+    - String content
+    - Double sentimentScore
+    - LocalDateTime createdAt
+}
+
+enum SenderType {
+    CUSTOMER
+    AI
+    SUPPORT_AGENT
+}
+
+class Ticket {
+    - Long ticketId
+    - Conversation conversation
+    - User customer
+    - User assignedAgent
+    - TicketCategory category
+    - TicketPriority priority
+    - TicketStatus status
+    - Double sentimentScore
+    - Double aiConfidenceScore
+    - String resolutionNotes
+    - LocalDateTime createdAt
+    - LocalDateTime updatedAt
+}
+
+enum TicketCategory {
+    BILLING
+    TECHNICAL
+    ACCOUNT
+    GENERAL_INQUIRY
+    REFUND
+}
+
+enum TicketPriority {
+    LOW
+    MEDIUM
+    HIGH
+    CRITICAL
+}
+
+enum TicketStatus {
+    OPEN
+    ESCALATED
+    IN_PROGRESS
+    ON_HOLD
+    RESOLVED
+    CLOSED
+}
+
+class KnowledgeBaseEntry {
+    - Long kbId
+    - String questionPattern
+    - String answerTemplate
+    - String category
+    - User lastUpdatedBy
+    - LocalDateTime lastUpdatedAt
+}
+
+class Notification {
+    - Long notificationId
+    - User user
+    - Ticket ticket
+    - String message
+    - Boolean isRead
+    - LocalDateTime createdAt
+}
+
+class SystemLog {
+    - Long logId
+    - User user
+    - Ticket ticket
+    - String eventType
+    - String description
+    - LocalDateTime createdAt
+}
+
+class AuthService {
+    + register()
+    + login()
+    + assignRole()
+    + updateUserStatus()
+}
+
+class ConversationService {
+    + startConversation()
+    + saveMessage()
+    + getConversationHistory()
+    + completeConversation()
+}
+
+class ChatbotService {
+    + processMessage()
+    + analyseIntent()
+    + analyseSentiment()
+    + calculateConfidence()
+    + generateResponse()
+    + determineEscalation()
+}
+
+class TicketService {
+    + createTicket()
+    + classifyTicket()
+    + prioritiseTicket()
+    + assignToAgent()
+    + updateStatus()
+    + addResolutionNotes()
+}
+
+class KnowledgeBaseService {
+    + addEntry()
+    + updateEntry()
+    + deleteEntry()
+    + findMatchingEntry()
+}
+
+class NotificationService {
+    + notifyAgent()
+    + notifyCustomer()
+    + markAsRead()
+}
+
+class AnalyticsService {
+    + getTicketStatistics()
+    + getSentimentTrends()
+    + getEscalationRate()
+    + getChatbotPerformance()
+}
+
+class SystemLogService {
+    + logEvent()
+}
+
+User "1" --> "0..*" Conversation : starts
+
+Conversation "1" --> "0..*" Message : contains
+
+Conversation "1" --> "0..1" Ticket : creates
+
+User "1" --> "0..*" Ticket : customer
+
+User "0..1" --> "0..*" Ticket : assigned agent
+
+User "0..1" --> "0..*" Message : sends
+
+User "1" --> "0..*" KnowledgeBaseEntry : maintains
+
+User "1" --> "0..*" Notification : receives
+
+Ticket "1" --> "0..*" Notification : generates
+
+User "0..1" --> "0..*" SystemLog : associated with
+
+Ticket "0..1" --> "0..*" SystemLog : related to
+
+UserRole ..> User
+
+UserStatus ..> User
+
+ConversationStatus ..> Conversation
+
+SenderType ..> Message
+
+TicketCategory ..> Ticket
+
+TicketPriority ..> Ticket
+
+TicketStatus ..> Ticket
+
+AuthService --> User
+
+ConversationService --> Conversation
+ConversationService --> Message
+
+ChatbotService --> Conversation
+ChatbotService --> Message
+ChatbotService --> Ticket
+ChatbotService --> KnowledgeBaseEntry
+
+TicketService --> Ticket
+TicketService --> Conversation
+
+KnowledgeBaseService --> KnowledgeBaseEntry
+
+NotificationService --> Notification
+
+AnalyticsService --> Ticket
+AnalyticsService --> Conversation
+AnalyticsService --> Message
+
+SystemLogService --> SystemLog
+
+@enduml

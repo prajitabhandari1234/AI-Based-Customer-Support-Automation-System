@@ -1,0 +1,52 @@
+@startuml
+title AI-Based Customer Support Automation System - Component Diagram
+
+package "Presentation Layer (Frontend)" {
+  component "Client Chat UI" as ChatUI
+  component "Support Agent Dashboard" as AgentDashboard
+  component "Admin Analytics Dashboard" as AdminDashboard
+}
+
+package "Application Layer (Backend - Spring Boot)" {
+  component "Auth & User Management Service" as AuthService
+  component "Chatbot & AI Processing Service" as ChatbotService
+  component "Ticket Management Service" as TicketService
+  component "Knowledge Base Service" as KBService
+  component "Analytics Service" as AnalyticsService
+}
+
+package "Data Layer (Database)" {
+  database "User Table" as UserTable
+  database "Ticket Table" as TicketTable
+  database "Message Table" as MessageTable
+  database "Knowledge Base Table" as KBTable
+}
+
+cloud "External AI Service\n(OpenAI / Gemini)" as AISvc
+
+' Frontend to Backend
+ChatUI --> ChatbotService : REST\n/api/chat
+ChatUI --> TicketService : REST\n/api/tickets
+ChatUI --> AuthService : REST\n/api/auth
+
+AgentDashboard --> TicketService : REST\n/api/agent/tickets
+AgentDashboard --> AuthService : REST\n/api/auth
+
+AdminDashboard --> AnalyticsService : REST\n/api/analytics
+AdminDashboard --> KBService : REST\n/api/kb
+AdminDashboard --> AuthService : REST\n/api/auth
+AdminDashboard --> AuthService : Manage users
+
+' Backend to DB
+AuthService --> UserTable
+TicketService --> TicketTable
+TicketService --> MessageTable
+ChatbotService --> MessageTable
+KBService --> KBTable
+AnalyticsService --> TicketTable
+AnalyticsService --> MessageTable
+
+' Backend to External AI
+ChatbotService --> AISvc : NLP, Sentiment, Generation
+
+@enduml
