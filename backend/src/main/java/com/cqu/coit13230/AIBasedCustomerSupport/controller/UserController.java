@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
 
@@ -55,13 +56,12 @@ public class UserController {
      * Retrieves a user by identifier.
      *
      * @param userId the identifier of the user
-     * @return the requested user, or HTTP 404 if not found
+     * @return the requested user
+     * @throws ResourceNotFoundException if no user exists with the specified identifier
      */
     @GetMapping("/{userId}")
     public ResponseEntity<User> getUserById(@PathVariable Long userId) {
-        return userService.getUserById(userId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(userService.getUserById(userId));
     }
 
     /**
@@ -80,35 +80,35 @@ public class UserController {
      *
      * @param userId the identifier of the user to update
      * @param user the updated user information
-     * @return the updated user, or HTTP 404 if not found
+     * @return the updated user
+     * @throws ResourceNotFoundException if no user exists with the specified identifier
      */
     @PutMapping("/{userId}")
     public ResponseEntity<User> updateUser(
             @PathVariable Long userId,
             @Valid @RequestBody User user) {
 
-        return userService.getUserById(userId)
-                .map(existingUser -> {
-                    user.setUserId(userId);
-                    return ResponseEntity.ok(userService.saveUser(user));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        userService.getUserById(userId);
+
+        user.setUserId(userId);
+
+        return ResponseEntity.ok(userService.saveUser(user));
     }
 
     /**
      * Deletes a user by identifier.
      *
      * @param userId the identifier of the user to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
+     * @return HTTP 204 when the user is deleted successfully
+     * @throws ResourceNotFoundException if no user exists with the specified identifier
      */
     @DeleteMapping("/{userId}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long userId) {
 
-        if (userService.getUserById(userId).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        userService.getUserById(userId);
 
         userService.deleteUser(userId);
+
         return ResponseEntity.noContent().build();
     }
 }

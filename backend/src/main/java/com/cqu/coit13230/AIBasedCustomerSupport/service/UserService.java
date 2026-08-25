@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
 
@@ -51,13 +52,18 @@ public class UserService {
     }
 
     /**
-     * Retrieves a user by identifier.
+     * Retrieves a user by their unique identifier.
      *
-     * @param userId the identifier of the user
-     * @return an optional containing the user if found
+     * @param userId the unique identifier of the user
+     * @return the user associated with the specified identifier
+     * @throws ResourceNotFoundException if no user exists with the specified identifier
      */
-    public Optional<User> getUserById(Long userId) {
-        return userRepository.findById(userId);
+    public User getUserById(Long userId) {
+
+        return userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "User not found with ID: " + userId));
     }
 
     /**
