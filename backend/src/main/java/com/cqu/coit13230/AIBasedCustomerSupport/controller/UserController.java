@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
 
+import jakarta.validation.Valid;
+
 /**
  * REST controller responsible for handling HTTP requests related to
  * {@link User} entities.
@@ -69,7 +71,7 @@ public class UserController {
      * @return the created user
      */
     @PostMapping
-    public User createUser(@RequestBody User user) {
+    public User createUser(@Valid @RequestBody User user) {
         return userService.saveUser(user);
     }
 
@@ -83,7 +85,7 @@ public class UserController {
     @PutMapping("/{userId}")
     public ResponseEntity<User> updateUser(
             @PathVariable Long userId,
-            @RequestBody User user) {
+            @Valid @RequestBody User user) {
 
         return userService.getUserById(userId)
                 .map(existingUser -> {
