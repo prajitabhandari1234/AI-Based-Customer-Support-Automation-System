@@ -12,8 +12,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.ConversationService;
+
+import jakarta.validation.Valid;
 
 /**
  * REST controller responsible for handling HTTP requests related to
@@ -54,15 +57,15 @@ public class ConversationController {
      * Retrieves a conversation by identifier.
      *
      * @param conversationId the identifier of the conversation
-     * @return the requested conversation, or HTTP 404 if not found
+     * @return the requested conversation
+     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
      */
     @GetMapping("/{conversationId}")
     public ResponseEntity<Conversation> getConversationById(
             @PathVariable Long conversationId) {
 
-        return conversationService.getConversationById(conversationId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(
+                conversationService.getConversationById(conversationId));
     }
 
     /**
@@ -73,7 +76,7 @@ public class ConversationController {
      */
     @PostMapping
     public Conversation createConversation(
-            @RequestBody Conversation conversation) {
+            @Valid @RequestBody Conversation conversation) {
 
         return conversationService.saveConversation(conversation);
     }
@@ -83,37 +86,37 @@ public class ConversationController {
      *
      * @param conversationId the identifier of the conversation to update
      * @param conversation the updated conversation information
-     * @return the updated conversation, or HTTP 404 if not found
+     * @return the updated conversation
+     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
      */
     @PutMapping("/{conversationId}")
     public ResponseEntity<Conversation> updateConversation(
             @PathVariable Long conversationId,
-            @RequestBody Conversation conversation) {
+            @Valid @RequestBody Conversation conversation) {
 
-        return conversationService.getConversationById(conversationId)
-                .map(existingConversation -> {
-                    conversation.setConversationId(conversationId);
-                    return ResponseEntity.ok(
-                            conversationService.saveConversation(conversation));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        conversationService.getConversationById(conversationId);
+
+        conversation.setConversationId(conversationId);
+
+        return ResponseEntity.ok(
+                conversationService.saveConversation(conversation));
     }
 
     /**
      * Deletes a conversation by identifier.
      *
      * @param conversationId the identifier of the conversation to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
+     * @return HTTP 204 when the conversation is deleted successfully
+     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
      */
     @DeleteMapping("/{conversationId}")
     public ResponseEntity<Void> deleteConversation(
             @PathVariable Long conversationId) {
 
-        if (conversationService.getConversationById(conversationId).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        conversationService.getConversationById(conversationId);
 
         conversationService.deleteConversation(conversationId);
+
         return ResponseEntity.noContent().build();
     }
 }
