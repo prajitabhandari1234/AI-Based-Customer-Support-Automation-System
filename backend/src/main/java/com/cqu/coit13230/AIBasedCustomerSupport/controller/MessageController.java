@@ -12,8 +12,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.MessageService;
+
+import jakarta.validation.Valid;
 
 /**
  * REST controller responsible for handling HTTP requests related to
@@ -54,15 +57,15 @@ public class MessageController {
      * Retrieves a message by identifier.
      *
      * @param messageId the identifier of the message
-     * @return the requested message, or HTTP 404 if not found
+     * @return the requested message
+     * @throws ResourceNotFoundException if no message exists with the specified identifier
      */
     @GetMapping("/{messageId}")
     public ResponseEntity<Message> getMessageById(
             @PathVariable Long messageId) {
 
-        return messageService.getMessageById(messageId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(
+                messageService.getMessageById(messageId));
     }
 
     /**
@@ -72,7 +75,9 @@ public class MessageController {
      * @return the created message
      */
     @PostMapping
-    public Message createMessage(@RequestBody Message message) {
+    public Message createMessage(
+            @Valid @RequestBody Message message) {
+
         return messageService.saveMessage(message);
     }
 
@@ -81,37 +86,37 @@ public class MessageController {
      *
      * @param messageId the identifier of the message to update
      * @param message the updated message information
-     * @return the updated message, or HTTP 404 if not found
+     * @return the updated message
+     * @throws ResourceNotFoundException if no message exists with the specified identifier
      */
     @PutMapping("/{messageId}")
     public ResponseEntity<Message> updateMessage(
             @PathVariable Long messageId,
-            @RequestBody Message message) {
+            @Valid @RequestBody Message message) {
 
-        return messageService.getMessageById(messageId)
-                .map(existingMessage -> {
-                    message.setMessageId(messageId);
-                    return ResponseEntity.ok(
-                            messageService.saveMessage(message));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        messageService.getMessageById(messageId);
+
+        message.setMessageId(messageId);
+
+        return ResponseEntity.ok(
+                messageService.saveMessage(message));
     }
 
     /**
      * Deletes a message by identifier.
      *
      * @param messageId the identifier of the message to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
+     * @return HTTP 204 when the message is deleted successfully
+     * @throws ResourceNotFoundException if no message exists with the specified identifier
      */
     @DeleteMapping("/{messageId}")
     public ResponseEntity<Void> deleteMessage(
             @PathVariable Long messageId) {
 
-        if (messageService.getMessageById(messageId).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        messageService.getMessageById(messageId);
 
         messageService.deleteMessage(messageId);
+
         return ResponseEntity.noContent().build();
     }
 }
