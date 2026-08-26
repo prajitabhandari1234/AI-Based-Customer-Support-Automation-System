@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.TicketService;
 
+import jakarta.validation.Valid;
+
 /**
  * REST controller responsible for handling HTTP requests related to
  * {@link Ticket} entities.
@@ -54,15 +56,14 @@ public class TicketController {
      * Retrieves a ticket by identifier.
      *
      * @param ticketId the identifier of the ticket
-     * @return the requested ticket, or HTTP 404 if not found
+     * @return the requested ticket
      */
     @GetMapping("/{ticketId}")
     public ResponseEntity<Ticket> getTicketById(
             @PathVariable Long ticketId) {
 
-        return ticketService.getTicketById(ticketId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(
+                ticketService.getTicketById(ticketId));
     }
 
     /**
@@ -72,7 +73,9 @@ public class TicketController {
      * @return the created ticket
      */
     @PostMapping
-    public Ticket createTicket(@RequestBody Ticket ticket) {
+    public Ticket createTicket(
+            @Valid @RequestBody Ticket ticket) {
+
         return ticketService.saveTicket(ticket);
     }
 
@@ -81,37 +84,35 @@ public class TicketController {
      *
      * @param ticketId the identifier of the ticket to update
      * @param ticket the updated ticket information
-     * @return the updated ticket, or HTTP 404 if not found
+     * @return the updated ticket
      */
     @PutMapping("/{ticketId}")
     public ResponseEntity<Ticket> updateTicket(
             @PathVariable Long ticketId,
-            @RequestBody Ticket ticket) {
+            @Valid @RequestBody Ticket ticket) {
 
-        return ticketService.getTicketById(ticketId)
-                .map(existingTicket -> {
-                    ticket.setTicketId(ticketId);
-                    return ResponseEntity.ok(
-                            ticketService.saveTicket(ticket));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        ticketService.getTicketById(ticketId);
+
+        ticket.setTicketId(ticketId);
+
+        return ResponseEntity.ok(
+                ticketService.saveTicket(ticket));
     }
 
     /**
      * Deletes a ticket by identifier.
      *
      * @param ticketId the identifier of the ticket to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
+     * @return HTTP 204 if successfully deleted
      */
     @DeleteMapping("/{ticketId}")
     public ResponseEntity<Void> deleteTicket(
             @PathVariable Long ticketId) {
 
-        if (ticketService.getTicketById(ticketId).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        ticketService.getTicketById(ticketId);
 
         ticketService.deleteTicket(ticketId);
+
         return ResponseEntity.noContent().build();
     }
 }
