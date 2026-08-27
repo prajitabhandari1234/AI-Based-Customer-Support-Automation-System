@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.KnowledgeBaseEntry;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.KnowledgeBaseEntryService;
 
+import jakarta.validation.Valid;
+
 /**
  * REST controller responsible for handling HTTP requests related to
  * {@link KnowledgeBaseEntry} entities.
@@ -35,7 +37,8 @@ public class KnowledgeBaseEntryController {
      * Constructs a new {@code KnowledgeBaseEntryController} with the required
      * knowledge base service.
      *
-     * @param knowledgeBaseEntryService service used to manage knowledge base entries
+     * @param knowledgeBaseEntryService service used to manage
+     *                                  knowledge base entries
      */
     public KnowledgeBaseEntryController(
             KnowledgeBaseEntryService knowledgeBaseEntryService) {
@@ -57,15 +60,14 @@ public class KnowledgeBaseEntryController {
      * Retrieves a knowledge base entry by identifier.
      *
      * @param entryId the identifier of the knowledge base entry
-     * @return the requested entry, or HTTP 404 if not found
+     * @return the requested knowledge base entry
      */
     @GetMapping("/{entryId}")
     public ResponseEntity<KnowledgeBaseEntry> getKnowledgeBaseEntryById(
             @PathVariable Long entryId) {
 
-        return knowledgeBaseEntryService.getKnowledgeBaseEntryById(entryId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(
+                knowledgeBaseEntryService.getKnowledgeBaseEntryById(entryId));
     }
 
     /**
@@ -76,7 +78,7 @@ public class KnowledgeBaseEntryController {
      */
     @PostMapping
     public KnowledgeBaseEntry createKnowledgeBaseEntry(
-            @RequestBody KnowledgeBaseEntry entry) {
+            @Valid @RequestBody KnowledgeBaseEntry entry) {
 
         return knowledgeBaseEntryService.saveKnowledgeBaseEntry(entry);
     }
@@ -86,40 +88,35 @@ public class KnowledgeBaseEntryController {
      *
      * @param entryId the identifier of the knowledge base entry to update
      * @param entry the updated knowledge base entry information
-     * @return the updated entry, or HTTP 404 if not found
+     * @return the updated knowledge base entry
      */
     @PutMapping("/{entryId}")
     public ResponseEntity<KnowledgeBaseEntry> updateKnowledgeBaseEntry(
             @PathVariable Long entryId,
-            @RequestBody KnowledgeBaseEntry entry) {
+            @Valid @RequestBody KnowledgeBaseEntry entry) {
 
-        return knowledgeBaseEntryService.getKnowledgeBaseEntryById(entryId)
-                .map(existingEntry -> {
-                    entry.setKbId(entryId);
-                    return ResponseEntity.ok(
-                            knowledgeBaseEntryService.saveKnowledgeBaseEntry(entry));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        knowledgeBaseEntryService.getKnowledgeBaseEntryById(entryId);
+
+        entry.setKbId(entryId);
+
+        return ResponseEntity.ok(
+                knowledgeBaseEntryService.saveKnowledgeBaseEntry(entry));
     }
 
     /**
      * Deletes a knowledge base entry by identifier.
      *
      * @param entryId the identifier of the knowledge base entry to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
+     * @return HTTP 204 after successful deletion
      */
     @DeleteMapping("/{entryId}")
     public ResponseEntity<Void> deleteKnowledgeBaseEntry(
             @PathVariable Long entryId) {
 
-        if (knowledgeBaseEntryService
-                .getKnowledgeBaseEntryById(entryId)
-                .isEmpty()) {
-
-            return ResponseEntity.notFound().build();
-        }
+        knowledgeBaseEntryService.getKnowledgeBaseEntryById(entryId);
 
         knowledgeBaseEntryService.deleteKnowledgeBaseEntry(entryId);
+
         return ResponseEntity.noContent().build();
     }
 }
