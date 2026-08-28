@@ -2,6 +2,8 @@ package com.cqu.coit13230.AIBasedCustomerSupport.model;
 
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -58,10 +60,13 @@ public class User {
     private String email;
 
     /**
-     * Securely hashed password used for user authentication.
+     * BCrypt-hashed password used for authentication.
+     *
+     * <p>This property is write-only when converted to JSON so that
+     * password hashes are never returned through API responses.</p>
      */
-    @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters long")
+    @NotBlank(message = "Password hash is required")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String passwordHash;
 

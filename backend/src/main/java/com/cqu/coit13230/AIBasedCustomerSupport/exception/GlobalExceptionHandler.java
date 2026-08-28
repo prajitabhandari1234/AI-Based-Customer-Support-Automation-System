@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     /**
-     * Handles validation errors produced by @Valid request bodies.
+     * Handles validation errors produced by {@code @Valid} request bodies.
      *
      * @param ex validation exception
      * @return structured validation error response
@@ -52,6 +52,12 @@ public class GlobalExceptionHandler {
                 .body(response);
     }
 
+    /**
+     * Handles requests for resources that do not exist.
+     *
+     * @param ex resource not found exception
+     * @return structured HTTP 404 error response
+     */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleResourceNotFound(
             ResourceNotFoundException ex) {
@@ -65,6 +71,33 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
+                .body(response);
+    }
+
+    /**
+     * Handles attempts to create resources that already exist.
+     *
+     * <p>
+     * This is used when a unique resource, such as a user email address,
+     * is already registered in the system.
+     * </p>
+     *
+     * @param ex duplicate resource exception
+     * @return structured HTTP 409 conflict response
+     */
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateResource(
+            DuplicateResourceException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.CONFLICT.value());
+        response.put("error", "Conflict");
+        response.put("message", ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
                 .body(response);
     }
 }
