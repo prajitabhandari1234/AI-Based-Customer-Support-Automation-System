@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.SystemLog;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.SystemLogService;
 
+import jakarta.validation.Valid;
+
 /**
  * REST controller responsible for handling HTTP requests related to
  * {@link SystemLog} entities.
@@ -72,7 +74,9 @@ public class SystemLogController {
      * @return the created system log record
      */
     @PostMapping
-    public SystemLog createSystemLog(@RequestBody SystemLog systemLog) {
+    public SystemLog createSystemLog(
+            @Valid @RequestBody SystemLog systemLog) {
+
         return systemLogService.saveSystemLog(systemLog);
     }
 
@@ -86,13 +90,18 @@ public class SystemLogController {
     @PutMapping("/{systemLogId}")
     public ResponseEntity<SystemLog> updateSystemLog(
             @PathVariable Long systemLogId,
-            @RequestBody SystemLog systemLog) {
+            @Valid @RequestBody SystemLog systemLog) {
 
         return systemLogService.getSystemLogById(systemLogId)
                 .map(existingSystemLog -> {
-                    systemLog.setLogId(systemLogId);
+
+                    existingSystemLog.setUser(systemLog.getUser());
+                    existingSystemLog.setTicket(systemLog.getTicket());
+                    existingSystemLog.setEventType(systemLog.getEventType());
+                    existingSystemLog.setDescription(systemLog.getDescription());
+
                     return ResponseEntity.ok(
-                            systemLogService.saveSystemLog(systemLog));
+                            systemLogService.saveSystemLog(existingSystemLog));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -112,6 +121,7 @@ public class SystemLogController {
         }
 
         systemLogService.deleteSystemLog(systemLogId);
+
         return ResponseEntity.noContent().build();
     }
 }

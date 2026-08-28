@@ -11,6 +11,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotBlank;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -68,23 +70,28 @@ public class SystemLog {
      * <p>Examples include login attempts, ticket creation, escalation,
      * ticket updates, and AI-related processing events.</p>
      */
+    @NotBlank(message = "Event type is required")
     @Column(nullable = false, length = 50)
     private String eventType;
 
     /**
      * Detailed description of the recorded system event.
      */
+    @NotBlank(message = "Description is required")
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
     /**
      * Date and time when the system event was recorded.
+     *
+     * <p>This value is generated automatically when the log entry is
+     * persisted and cannot be updated afterwards.</p>
      */
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     /**
-     * Initializes the log creation timestamp before the entity
+     * Initializes the creation timestamp before the system log entry
      * is persisted for the first time.
      */
     @PrePersist
