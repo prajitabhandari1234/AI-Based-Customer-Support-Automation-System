@@ -1,5 +1,6 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.ai;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketCategory;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;

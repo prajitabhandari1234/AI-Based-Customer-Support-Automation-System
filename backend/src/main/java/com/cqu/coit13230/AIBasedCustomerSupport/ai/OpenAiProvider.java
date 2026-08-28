@@ -1,5 +1,6 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.ai;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketCategory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;

@@ -1,6 +1,6 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.ai;
 
-import ccom.cqu.coit13230.AIBasedCustomerSupport.knowledge.KnowledgeBaseService;
+import com.cqu.coit13230.AIBasedCustomerSupport.knowledge.KnowledgeBaseService;
 import com.cqu.coit13230.AIBasedCustomerSupport.knowledge.KnowledgeMatch;
 import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketCategory;
 import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketPriority;

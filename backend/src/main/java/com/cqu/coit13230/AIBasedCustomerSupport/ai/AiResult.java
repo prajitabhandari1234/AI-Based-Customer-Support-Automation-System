@@ -1,5 +1,7 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.ai;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketCategory;
+import com.cqu.coit13230.AIBasedCustomerSupport.ticket.TicketPriority;
 
 import java.util.List;
 
