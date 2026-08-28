@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Notification;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.NotificationService;
 
+import jakarta.validation.Valid;
+
 /**
  * REST controller responsible for handling HTTP requests related to
  * {@link Notification} entities.
@@ -73,7 +75,7 @@ public class NotificationController {
      */
     @PostMapping
     public Notification createNotification(
-            @RequestBody Notification notification) {
+            @Valid @RequestBody Notification notification) {
 
         return notificationService.saveNotification(notification);
     }
@@ -88,11 +90,13 @@ public class NotificationController {
     @PutMapping("/{notificationId}")
     public ResponseEntity<Notification> updateNotification(
             @PathVariable Long notificationId,
-            @RequestBody Notification notification) {
+            @Valid @RequestBody Notification notification) {
 
         return notificationService.getNotificationById(notificationId)
                 .map(existingNotification -> {
+
                     notification.setNotificationId(notificationId);
+
                     return ResponseEntity.ok(
                             notificationService.saveNotification(notification));
                 })
@@ -114,6 +118,7 @@ public class NotificationController {
         }
 
         notificationService.deleteNotification(notificationId);
+
         return ResponseEntity.noContent().build();
     }
 }
