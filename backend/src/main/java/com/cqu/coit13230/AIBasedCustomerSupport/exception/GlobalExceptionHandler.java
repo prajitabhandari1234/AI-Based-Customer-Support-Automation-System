@@ -100,4 +100,48 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.CONFLICT)
                 .body(response);
     }
+
+    /**
+     * Handles authentication failures caused by invalid login credentials
+     * or an account that is not permitted to authenticate.
+     *
+     * @param ex authentication exception
+     * @return structured HTTP 401 unauthorized response
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthenticationException(
+            AuthenticationException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.UNAUTHORIZED.value());
+        response.put("error", "Unauthorized");
+        response.put("message", ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(response);
+    }
+        /**
+         * Handles authentication attempts made by inactive user accounts.
+         *
+         * @param ex account inactive exception
+         * @return structured HTTP 403 forbidden response
+         */
+        @ExceptionHandler(AccountInactiveException.class)
+        public ResponseEntity<Map<String, Object>> handleAccountInactive(
+                AccountInactiveException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.FORBIDDEN.value());
+        response.put("error", "Forbidden");
+        response.put("message", ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(response);
+        }
 }

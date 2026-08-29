@@ -5,7 +5,11 @@ import java.util.List;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.RegisterRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.AccountInactiveException;
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.AuthenticationException;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.DuplicateResourceException;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
@@ -18,8 +22,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  *
  * <p>
  * Provides business-layer operations for creating, retrieving,
- * updating, deleting, and registering users through the
- * {@link UserRepository}.
+ * updating, deleting, registering, and authenticating users through
+ * the {@link UserRepository}.
  * </p>
  */
 @Service
@@ -32,7 +36,7 @@ public class UserService {
      * Constructs a new {@code UserService} with the required dependencies.
      *
      * @param userRepository repository used to access user data
-     * @param passwordEncoder encoder used to securely hash user passwords
+     * @param passwordEncoder encoder used to securely hash and verify passwords
      */
     public UserService(
             UserRepository userRepository,
@@ -46,16 +50,15 @@ public class UserService {
      * Registers a new customer account.
      *
      * <p>
-     * The email address is checked to ensure that it is not already
-     * registered. The supplied password is securely hashed before the user
-     * is persisted. New public registrations are automatically assigned
-     * the {@link UserRole#CUSTOMER} role and {@link UserStatus#ACTIVE}
-     * account status.
+     * The email address is normalised before being checked for duplicates.
+     * The supplied password is securely hashed before the account is stored.
+     * Public registrations are automatically assigned the
+     * {@link UserRole#CUSTOMER} role and {@link UserStatus#ACTIVE} status.
      * </p>
      *
      * @param request registration information supplied by the customer
      * @return the newly registered user
-     * @throws IllegalArgumentException if the email address is already registered
+     * @throws DuplicateResourceException if the email address is already registered
      */
     public User registerUser(RegisterRequest request) {
 
@@ -76,6 +79,56 @@ public class UserService {
         user.setStatus(UserStatus.ACTIVE);
 
         return userRepository.save(user);
+    }
+
+    /**
+     * Authenticates a user using their email address and password.
+     *
+     * <p>
+     * The supplied email address is normalised before lookup. The plain-text
+     * password is compared with the stored BCrypt password hash using the
+     * configured {@link PasswordEncoder}.
+     * </p>
+     *
+     * <p>
+     * Only accounts with {@link UserStatus#ACTIVE} status are permitted
+     * to authenticate.
+     * </p>
+     *
+     * @param request login credentials supplied by the user
+     * @return safe information about the authenticated user
+     * @throws AuthenticationException if the credentials are invalid or
+     *         the account is inactive
+     */
+    public LoginResponse authenticateUser(LoginRequest request) {
+
+        String email = request.getEmail().trim().toLowerCase();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new AuthenticationException(
+                                "Invalid email or password"));
+
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPasswordHash())) {
+
+            throw new AuthenticationException(
+                    "Invalid email or password");
+        }
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AccountInactiveException(
+                    "User account is inactive");
+        }
+
+        return new LoginResponse(
+                user.getUserId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getStatus(),
+                "Login successful");
     }
 
     /**
@@ -105,6 +158,7 @@ public class UserService {
      * @throws ResourceNotFoundException if no user exists with the specified identifier
      */
     public User getUserById(Long userId) {
+
         return userRepository.findById(userId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
