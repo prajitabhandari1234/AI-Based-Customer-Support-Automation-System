@@ -10,12 +10,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import com.cqu.coit13230.AIBasedCustomerSupport.security.JwtAuthenticationFilter;
 
 /**
- * Security configuration for JWT-based authentication.
+ * Security configuration for JWT authentication and role-based
+ * access control within the application.
  *
  * <p>
- * Registration and login endpoints are publicly accessible.
- * Other API endpoints require a valid JWT. The application uses
- * stateless authentication, so server-side HTTP sessions are not used.
+ * Public authentication endpoints are accessible without a JWT.
+ * Protected endpoints require authentication and may additionally
+ * restrict access according to the authenticated user's role.
  * </p>
  */
 @Configuration
@@ -24,7 +25,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     /**
-     * Constructs the security configuration with the JWT filter.
+     * Constructs the security configuration.
      *
      * @param jwtAuthenticationFilter filter used to validate JWT tokens
      */
@@ -35,11 +36,11 @@ public class SecurityConfig {
     }
 
     /**
-     * Configures application security rules.
+     * Configures JWT authentication and role-based endpoint access.
      *
      * @param http Spring Security HTTP configuration
      * @return configured security filter chain
-     * @throws Exception if the configuration cannot be created
+     * @throws Exception if security configuration fails
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http)
@@ -59,6 +60,23 @@ public class SecurityConfig {
                                 "/api/auth/login")
                         .permitAll()
 
+                        // User management is restricted to administrators.
+                        .requestMatchers("/api/users/**")
+                        .hasRole("ADMIN")
+
+                        // Administrator-specific endpoints.
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("ADMIN")
+
+                        // Support-agent endpoints.
+                        .requestMatchers("/api/agent/**")
+                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
+
+                        // Customer-specific endpoints.
+                        .requestMatchers("/api/customer/**")
+                        .hasRole("CUSTOMER")
+
+                        // Remaining API endpoints require authentication.
                         .requestMatchers("/api/**")
                         .authenticated()
 
