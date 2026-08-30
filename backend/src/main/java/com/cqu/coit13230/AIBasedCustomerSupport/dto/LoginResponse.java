@@ -6,8 +6,11 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
 /**
  * Represents the response returned after a successful user login.
  *
- * <p>This DTO exposes only safe account information and does not
- * include the user's password or password hash.</p>
+ * <p>
+ * This DTO exposes safe account information together with the JWT
+ * generated after successful authentication. It does not expose the
+ * user's password or password hash.
+ * </p>
  */
 public class LoginResponse {
 
@@ -17,6 +20,7 @@ public class LoginResponse {
     private UserRole role;
     private UserStatus status;
     private String message;
+    private String token;
 
     /**
      * Constructs an empty login response.
@@ -25,7 +29,8 @@ public class LoginResponse {
     }
 
     /**
-     * Constructs a login response with authenticated user information.
+     * Constructs a login response with authenticated user information
+     * and the generated JWT.
      *
      * @param userId unique identifier of the authenticated user
      * @param name user's full name
@@ -33,6 +38,7 @@ public class LoginResponse {
      * @param role user's assigned role
      * @param status user's account status
      * @param message login result message
+     * @param token JWT generated for the authenticated user
      */
     public LoginResponse(
             Long userId,
@@ -40,7 +46,8 @@ public class LoginResponse {
             String email,
             UserRole role,
             UserStatus status,
-            String message) {
+            String message,
+            String token) {
 
         this.userId = userId;
         this.name = name;
@@ -48,6 +55,7 @@ public class LoginResponse {
         this.role = role;
         this.status = status;
         this.message = message;
+        this.token = token;
     }
 
     public Long getUserId() {
@@ -96,5 +104,23 @@ public class LoginResponse {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    /**
+     * Returns the JWT generated after successful authentication.
+     *
+     * @return JWT authentication token
+     */
+    public String getToken() {
+        return token;
+    }
+
+    /**
+     * Sets the JWT generated after successful authentication.
+     *
+     * @param token JWT authentication token
+     */
+    public void setToken(String token) {
+        this.token = token;
     }
 }

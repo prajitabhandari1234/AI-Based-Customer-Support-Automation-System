@@ -16,6 +16,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
+import com.cqu.coit13230.AIBasedCustomerSupport.security.JwtService;
 
 /**
  * Service class responsible for managing {@link User} entities.
@@ -31,19 +32,23 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     /**
      * Constructs a new {@code UserService} with the required dependencies.
      *
      * @param userRepository repository used to access user data
      * @param passwordEncoder encoder used to securely hash and verify passwords
+     * @param jwtService service used to generate JWT authentication tokens
      */
     public UserService(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     /**
@@ -92,13 +97,14 @@ public class UserService {
      *
      * <p>
      * Only accounts with {@link UserStatus#ACTIVE} status are permitted
-     * to authenticate.
+     * to authenticate. After successful authentication, a signed JWT is
+     * generated and returned to the client.
      * </p>
      *
      * @param request login credentials supplied by the user
-     * @return safe information about the authenticated user
-     * @throws AuthenticationException if the credentials are invalid or
-     *         the account is inactive
+     * @return safe account information together with a JWT
+     * @throws AuthenticationException if the credentials are invalid
+     * @throws AccountInactiveException if the account is inactive
      */
     public LoginResponse authenticateUser(LoginRequest request) {
 
@@ -122,13 +128,18 @@ public class UserService {
                     "User account is inactive");
         }
 
+        String token = jwtService.generateToken(
+                user.getEmail(),
+                user.getRole().name());
+
         return new LoginResponse(
                 user.getUserId(),
                 user.getName(),
                 user.getEmail(),
                 user.getRole(),
                 user.getStatus(),
-                "Login successful");
+                "Login successful",
+                token);
     }
 
     /**
