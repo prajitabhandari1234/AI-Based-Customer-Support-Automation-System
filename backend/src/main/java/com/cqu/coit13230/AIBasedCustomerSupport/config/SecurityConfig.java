@@ -1,17 +1,22 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.config;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.security.JwtAuthenticationFilter;
 
 /**
- * Security configuration for JWT authentication and role-based
- * access control within the application.
+ * Security configuration for JWT authentication, role-based access control,
+ * and Cross-Origin Resource Sharing (CORS) within the application.
  *
  * <p>
  * Public authentication endpoints are accessible without a JWT.
@@ -36,7 +41,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Configures JWT authentication and role-based endpoint access.
+     * Configures JWT authentication, CORS, and role-based endpoint access.
      *
      * @param http Spring Security HTTP configuration
      * @return configured security filter chain
@@ -49,12 +54,16 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
 
+                .cors(cors -> cors.configurationSource(
+                        corsConfigurationSource()))
+
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
 
+                        // Authentication endpoints are publicly accessible.
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login")
@@ -88,5 +97,54 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Configures Cross-Origin Resource Sharing (CORS) for frontend
+     * applications communicating with the backend REST API.
+     *
+     * <p>
+     * During development, requests from the local React development
+     * server are permitted. The allowed origin should be updated when
+     * the frontend is deployed to a production environment.
+     * </p>
+     *
+     * @return configured CORS configuration source
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+
+        CorsConfiguration configuration =
+                new CorsConfiguration();
+
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://localhost:3000"));
+
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"));
+
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type"));
+
+        configuration.setExposedHeaders(List.of(
+                "Authorization"));
+
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration(
+                "/**",
+                configuration);
+
+        return source;
     }
 }
