@@ -5,13 +5,16 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ForbiddenOperationException;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.ConversationRepository;
+import com.cqu.coit13230.AIBasedCustomerSupport.repository.MessageRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
 
@@ -24,19 +27,35 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * </p>
  *
  * <p>
- * The service also provides secure customer-specific ticket creation,
- * where the customer identity is obtained from JWT authentication
- * rather than being supplied directly by the client.
+ * The service also provides secure customer-specific ticket operations,
+ * including ticket creation, ticket history retrieval, and detailed
+ * ticket views with associated conversation message history.
+ * Customer identity is obtained from JWT authentication rather than
+ * being supplied directly by the client.
  * </p>
  */
 @Service
 public class TicketService {
 
+    /**
+     * Repository used to access support ticket records.
+     */
     private final TicketRepository ticketRepository;
 
+    /**
+     * Repository used to access customer conversations.
+     */
     private final ConversationRepository conversationRepository;
 
+    /**
+     * Repository used to access user records.
+     */
     private final UserRepository userRepository;
+
+    /**
+     * Repository used to access conversation messages.
+     */
+    private final MessageRepository messageRepository;
 
     /**
      * Constructs a new {@code TicketService} with the required
@@ -45,15 +64,18 @@ public class TicketService {
      * @param ticketRepository repository used to access ticket data
      * @param conversationRepository repository used to access conversation data
      * @param userRepository repository used to access user data
+     * @param messageRepository repository used to access message data
      */
     public TicketService(
             TicketRepository ticketRepository,
             ConversationRepository conversationRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            MessageRepository messageRepository) {
 
         this.ticketRepository = ticketRepository;
         this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
+        this.messageRepository = messageRepository;
     }
 
     /**
@@ -79,15 +101,18 @@ public class TicketService {
      * @throws ResourceNotFoundException if the customer or conversation
      *         cannot be found
      * @throws ForbiddenOperationException if the conversation does not
-     *   belong to the authenticated customer
+     *         belong to the authenticated customer
      */
     public Ticket createCustomerTicket(
             CreateTicketRequest request,
             String customerEmail) {
 
-        String normalizedEmail = customerEmail.trim().toLowerCase();
+        String normalizedEmail = customerEmail
+                .trim()
+                .toLowerCase();
 
-        User customer = userRepository.findByEmail(normalizedEmail)
+        User customer = userRepository
+                .findByEmail(normalizedEmail)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Customer not found with email: "
@@ -120,31 +145,35 @@ public class TicketService {
         return ticketRepository.save(ticket);
     }
 
-        /**
-         * Retrieves the support ticket history of an authenticated customer.
-         *
-         * <p>
-         * The customer is identified using the email address obtained from
-         * the authenticated JWT. Only tickets belonging to that customer
-         * are returned, preventing customers from viewing tickets owned by
-         * other users.
-         * </p>
-         *
-         * <p>
-         * Tickets are returned from the most recently created ticket to
-         * the oldest ticket.
-         * </p>
-         *
-         * @param customerEmail email address of the authenticated customer
-         * @return list of support tickets belonging to the customer
-         * @throws ResourceNotFoundException if the authenticated customer
-         *         cannot be found
-         */
-        public List<Ticket> getCustomerTicketHistory(String customerEmail) {
+    /**
+     * Retrieves the support ticket history of an authenticated customer.
+     *
+     * <p>
+     * The customer is identified using the email address obtained from
+     * the authenticated JWT. Only tickets belonging to that customer
+     * are returned, preventing customers from viewing tickets owned by
+     * other users.
+     * </p>
+     *
+     * <p>
+     * Tickets are returned from the most recently created ticket to
+     * the oldest ticket.
+     * </p>
+     *
+     * @param customerEmail email address of the authenticated customer
+     * @return list of support tickets belonging to the customer
+     * @throws ResourceNotFoundException if the authenticated customer
+     *         cannot be found
+     */
+    public List<Ticket> getCustomerTicketHistory(
+            String customerEmail) {
 
-        String normalizedEmail = customerEmail.trim().toLowerCase();
+        String normalizedEmail = customerEmail
+                .trim()
+                .toLowerCase();
 
-        User customer = userRepository.findByEmail(normalizedEmail)
+        User customer = userRepository
+                .findByEmail(normalizedEmail)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Customer not found with email: "
@@ -153,10 +182,78 @@ public class TicketService {
         return ticketRepository
                 .findByCustomerUserIdOrderByCreatedAtDesc(
                         customer.getUserId());
-        }
+    }
 
     /**
-     * Creates or updates a ticket.
+     * Retrieves detailed ticket information and the associated
+     * conversation history for an authenticated customer.
+     *
+     * <p>
+     * The customer is identified using the email address stored in the
+     * authenticated JWT. The requested ticket is retrieved and ownership
+     * is verified before any ticket or conversation information is
+     * returned.
+     * </p>
+     *
+     * <p>
+     * If the ticket belongs to the authenticated customer, all messages
+     * belonging to the ticket's conversation are retrieved in
+     * chronological order from oldest to newest.
+     * </p>
+     *
+     * @param ticketId unique identifier of the requested ticket
+     * @param customerEmail email address of the authenticated customer
+     * @return ticket details together with conversation message history
+     * @throws ResourceNotFoundException if the customer or ticket
+     *         cannot be found
+     * @throws ForbiddenOperationException if the ticket does not belong
+     *         to the authenticated customer
+     */
+    public TicketDetailsResponse getCustomerTicketDetails(
+            Long ticketId,
+            String customerEmail) {
+
+        String normalizedEmail = customerEmail
+                .trim()
+                .toLowerCase();
+
+        User customer = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Customer not found with email: "
+                                        + normalizedEmail));
+
+        Ticket ticket = ticketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Ticket not found with ID: "
+                                        + ticketId));
+
+        if (!ticket.getCustomer()
+                .getUserId()
+                .equals(customer.getUserId())) {
+
+            throw new ForbiddenOperationException(
+                    "Ticket does not belong to the authenticated customer");
+        }
+
+        Long conversationId =
+                ticket.getConversation().getConversationId();
+
+        List<Message> messages =
+                messageRepository
+                        .findByConversationConversationIdOrderByCreatedAtAsc(
+                                conversationId);
+
+        return new TicketDetailsResponse(
+                ticket,
+                messages);
+    }
+
+    /**
+     * Creates or updates a support ticket.
      *
      * <p>
      * Verifies that the referenced conversation and customer exist.
@@ -164,33 +261,38 @@ public class TicketService {
      * verified before the ticket is saved.
      * </p>
      *
-     * @param ticket the ticket to be saved
-     * @return the saved ticket
+     * @param ticket ticket to be saved
+     * @return saved ticket
      * @throws ResourceNotFoundException if the conversation, customer,
-     *         or assigned agent does not exist
+     *         or assigned agent cannot be found
      */
     public Ticket saveTicket(Ticket ticket) {
 
         Long conversationId =
-                ticket.getConversation().getConversationId();
+                ticket.getConversation()
+                        .getConversationId();
 
-        Conversation conversation = conversationRepository
-                .findById(conversationId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Conversation not found with ID: "
-                                        + conversationId));
+        Conversation conversation =
+                conversationRepository
+                        .findById(conversationId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Conversation not found with ID: "
+                                                + conversationId));
 
         ticket.setConversation(conversation);
 
-        Long customerId = ticket.getCustomer().getUserId();
+        Long customerId =
+                ticket.getCustomer()
+                        .getUserId();
 
-        User customer = userRepository
-                .findById(customerId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Customer not found with ID: "
-                                        + customerId));
+        User customer =
+                userRepository
+                        .findById(customerId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Customer not found with ID: "
+                                                + customerId));
 
         ticket.setCustomer(customer);
 
@@ -198,14 +300,16 @@ public class TicketService {
                 && ticket.getAssignedAgent().getUserId() != null) {
 
             Long assignedAgentId =
-                    ticket.getAssignedAgent().getUserId();
+                    ticket.getAssignedAgent()
+                            .getUserId();
 
-            User assignedAgent = userRepository
-                    .findById(assignedAgentId)
-                    .orElseThrow(() ->
-                            new ResourceNotFoundException(
-                                    "Assigned agent not found with ID: "
-                                            + assignedAgentId));
+            User assignedAgent =
+                    userRepository
+                            .findById(assignedAgentId)
+                            .orElseThrow(() ->
+                                    new ResourceNotFoundException(
+                                            "Assigned agent not found with ID: "
+                                                    + assignedAgentId));
 
             ticket.setAssignedAgent(assignedAgent);
         }
@@ -216,7 +320,7 @@ public class TicketService {
     /**
      * Retrieves all support tickets.
      *
-     * @return list containing all tickets
+     * @return list containing all support tickets
      */
     public List<Ticket> getAllTickets() {
         return ticketRepository.findAll();

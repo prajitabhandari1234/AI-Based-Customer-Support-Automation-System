@@ -6,12 +6,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.TicketService;
 
@@ -25,7 +27,7 @@ import jakarta.validation.Valid;
  * Endpoints provided by this controller are intended for authenticated
  * users with the {@code CUSTOMER} role. Customer identity is obtained
  * from the authenticated JWT rather than being supplied directly in
- * the request body.
+ * request data.
  * </p>
  */
 @RestController
@@ -39,7 +41,9 @@ public class CustomerTicketController {
      *
      * @param ticketService service used to manage support tickets
      */
-    public CustomerTicketController(TicketService ticketService) {
+    public CustomerTicketController(
+            TicketService ticketService) {
+
         this.ticketService = ticketService;
     }
 
@@ -49,22 +53,23 @@ public class CustomerTicketController {
      * <p>
      * The authenticated customer's email address is obtained from the
      * Spring Security authentication context. The service verifies that
-     * the supplied conversation belongs to that customer before creating
+     * the supplied conversation belongs to the customer before creating
      * the ticket.
      * </p>
      *
      * @param request information required to create the ticket
      * @param authentication authentication information obtained from the JWT
-     * @return the newly created support ticket
+     * @return newly created support ticket
      */
     @PostMapping
     public ResponseEntity<Ticket> createTicket(
             @Valid @RequestBody CreateTicketRequest request,
             Authentication authentication) {
 
-        Ticket createdTicket = ticketService.createCustomerTicket(
-                request,
-                authentication.getName());
+        Ticket createdTicket =
+                ticketService.createCustomerTicket(
+                        request,
+                        authentication.getName());
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -76,8 +81,8 @@ public class CustomerTicketController {
      *
      * <p>
      * Customer identity is obtained from the authenticated JWT rather
-     * than from a request parameter. This ensures that customers can
-     * retrieve only tickets associated with their own account.
+     * than from a request parameter. This prevents customers from
+     * retrieving ticket history belonging to another user.
      * </p>
      *
      * @param authentication authentication information obtained from the JWT
@@ -92,5 +97,32 @@ public class CustomerTicketController {
                         authentication.getName());
 
         return ResponseEntity.ok(tickets);
+    }
+
+    /**
+     * Retrieves a specific support ticket together with its associated
+     * conversation message history.
+     *
+     * <p>
+     * The backend verifies that the ticket belongs to the authenticated
+     * customer before returning ticket information or conversation
+     * messages.
+     * </p>
+     *
+     * @param ticketId unique identifier of the requested ticket
+     * @param authentication authentication information obtained from the JWT
+     * @return ticket details and associated conversation history
+     */
+    @GetMapping("/{ticketId}")
+    public ResponseEntity<TicketDetailsResponse> getTicketDetails(
+            @PathVariable Long ticketId,
+            Authentication authentication) {
+
+        TicketDetailsResponse response =
+                ticketService.getCustomerTicketDetails(
+                        ticketId,
+                        authentication.getName());
+
+        return ResponseEntity.ok(response);
     }
 }
