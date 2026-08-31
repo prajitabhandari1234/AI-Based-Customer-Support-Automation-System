@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AdminUserUpdateRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.RegisterRequest;
@@ -190,5 +191,31 @@ public class UserService {
         }
 
         userRepository.deleteById(userId);
+    }
+
+    /**
+     * Updates the role and account status of an existing user.
+     *
+     * <p>
+     * This operation is intended for administrator user management.
+     * Only administrative fields such as the user's role and account
+     * status are modified. Other account information remains unchanged.
+     * </p>
+     *
+     * @param userId the identifier of the user to update
+     * @param request the new role and account status
+     * @return the updated user
+     * @throws ResourceNotFoundException if the user does not exist
+     */
+    public User updateUserByAdmin(
+            Long userId,
+            AdminUserUpdateRequest request) {
+
+        User user = getUserById(userId);
+
+        user.setRole(request.getRole());
+        user.setStatus(request.getStatus());
+
+        return userRepository.save(user);
     }
 }
