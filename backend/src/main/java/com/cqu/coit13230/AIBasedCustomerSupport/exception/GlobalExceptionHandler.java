@@ -144,4 +144,32 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.FORBIDDEN)
                 .body(response);
         }
+
+        /**
+         * Handles operations that are forbidden for the authenticated user.
+         *
+         * <p>
+         * This exception is used when a user is successfully authenticated
+         * but attempts to access or modify a resource that they are not
+         * authorised to use.
+         * </p>
+         *
+         * @param ex forbidden operation exception
+         * @return structured HTTP 403 forbidden response
+         */
+        @ExceptionHandler(ForbiddenOperationException.class)
+        public ResponseEntity<Map<String, Object>> handleForbiddenOperation(
+                ForbiddenOperationException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.FORBIDDEN.value());
+        response.put("error", "Forbidden");
+        response.put("message", ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(response);
+        }
 }
