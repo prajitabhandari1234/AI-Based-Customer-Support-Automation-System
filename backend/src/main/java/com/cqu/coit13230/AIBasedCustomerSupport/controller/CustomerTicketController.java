@@ -1,8 +1,11 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.controller;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -66,5 +69,28 @@ public class CustomerTicketController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(createdTicket);
+    }
+
+    /**
+     * Retrieves the support ticket history of the authenticated customer.
+     *
+     * <p>
+     * Customer identity is obtained from the authenticated JWT rather
+     * than from a request parameter. This ensures that customers can
+     * retrieve only tickets associated with their own account.
+     * </p>
+     *
+     * @param authentication authentication information obtained from the JWT
+     * @return list of tickets belonging to the authenticated customer
+     */
+    @GetMapping
+    public ResponseEntity<List<Ticket>> getTicketHistory(
+            Authentication authentication) {
+
+        List<Ticket> tickets =
+                ticketService.getCustomerTicketHistory(
+                        authentication.getName());
+
+        return ResponseEntity.ok(tickets);
     }
 }

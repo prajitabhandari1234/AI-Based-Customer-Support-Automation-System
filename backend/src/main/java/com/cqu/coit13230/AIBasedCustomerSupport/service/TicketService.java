@@ -120,6 +120,41 @@ public class TicketService {
         return ticketRepository.save(ticket);
     }
 
+        /**
+         * Retrieves the support ticket history of an authenticated customer.
+         *
+         * <p>
+         * The customer is identified using the email address obtained from
+         * the authenticated JWT. Only tickets belonging to that customer
+         * are returned, preventing customers from viewing tickets owned by
+         * other users.
+         * </p>
+         *
+         * <p>
+         * Tickets are returned from the most recently created ticket to
+         * the oldest ticket.
+         * </p>
+         *
+         * @param customerEmail email address of the authenticated customer
+         * @return list of support tickets belonging to the customer
+         * @throws ResourceNotFoundException if the authenticated customer
+         *         cannot be found
+         */
+        public List<Ticket> getCustomerTicketHistory(String customerEmail) {
+
+        String normalizedEmail = customerEmail.trim().toLowerCase();
+
+        User customer = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Customer not found with email: "
+                                        + normalizedEmail));
+
+        return ticketRepository
+                .findByCustomerUserIdOrderByCreatedAtDesc(
+                        customer.getUserId());
+        }
+
     /**
      * Creates or updates a ticket.
      *
