@@ -3,7 +3,10 @@ package com.cqu.coit13230.AIBasedCustomerSupport.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -55,5 +58,25 @@ public class AgentTicketController {
                 ticketService.getEscalatedTickets();
 
         return ResponseEntity.ok(tickets);
+    }
+
+    /**
+     * Assigns an escalated ticket to the authenticated support agent.
+     *
+     * @param ticketId unique identifier of the ticket
+     * @param authentication authentication information obtained from JWT
+     * @return updated support ticket
+     */
+    @PutMapping("/{ticketId}/assign")
+    public ResponseEntity<Ticket> assignTicket(
+            @PathVariable Long ticketId,
+            Authentication authentication) {
+
+        Ticket assignedTicket =
+                ticketService.assignTicketToAgent(
+                        ticketId,
+                        authentication.getName());
+
+        return ResponseEntity.ok(assignedTicket);
     }
 }

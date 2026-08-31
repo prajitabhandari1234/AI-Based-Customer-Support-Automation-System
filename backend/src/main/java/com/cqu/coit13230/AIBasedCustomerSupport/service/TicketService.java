@@ -13,6 +13,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.ConversationRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.MessageRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
@@ -369,5 +370,66 @@ public class TicketService {
         return ticketRepository
                 .findByStatusOrderByCreatedAtAsc(
                         TicketStatus.ESCALATED);
+        }
+
+        /**
+         * Assigns an escalated support ticket to the authenticated
+         * support agent.
+         *
+         * <p>
+         * The support agent is identified using the email address obtained
+         * from JWT authentication. Only users with the
+         * {@link UserRole#SUPPORT_AGENT} role can assign tickets.
+         * </p>
+         *
+         * <p>
+         * Only tickets with {@link TicketStatus#ESCALATED} status can be
+         * assigned. After successful assignment, the ticket status is
+         * changed to {@link TicketStatus#IN_PROGRESS}.
+         * </p>
+         *
+         * @param ticketId unique identifier of the ticket to assign
+         * @param agentEmail email address of the authenticated support agent
+         * @return updated ticket containing the assigned support agent
+         * @throws ResourceNotFoundException if the agent or ticket cannot be found
+         * @throws ForbiddenOperationException if the user is not a support agent
+         *         or the ticket cannot currently be assigned
+         */
+        public Ticket assignTicketToAgent(
+                Long ticketId,
+                String agentEmail) {
+
+        String normalizedEmail = agentEmail
+                .trim()
+                .toLowerCase();
+
+        User agent = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Support agent not found with email: "
+                                        + normalizedEmail));
+
+        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+                throw new ForbiddenOperationException(
+                        "Only support agents can assign tickets");
+        }
+
+        Ticket ticket = ticketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Ticket not found with ID: "
+                                        + ticketId));
+
+        if (ticket.getStatus() != TicketStatus.ESCALATED) {
+                throw new ForbiddenOperationException(
+                        "Only escalated tickets can be assigned");
+        }
+
+        ticket.setAssignedAgent(agent);
+        ticket.setStatus(TicketStatus.IN_PROGRESS);
+
+        return ticketRepository.save(ticket);
         }
 }
