@@ -351,4 +351,23 @@ public class TicketService {
     public void deleteTicket(Long ticketId) {
         ticketRepository.deleteById(ticketId);
     }
+
+        /**
+         * Retrieves all support tickets that have been escalated for
+         * human assistance.
+         *
+         * <p>
+         * Escalated tickets are returned from the oldest to the newest so
+         * that support agents can prioritise tickets that have been waiting
+         * the longest.
+         * </p>
+         *
+         * @return list of tickets with {@link TicketStatus#ESCALATED} status
+         */
+        public List<Ticket> getEscalatedTickets() {
+
+        return ticketRepository
+                .findByStatusOrderByCreatedAtAsc(
+                        TicketStatus.ESCALATED);
+        }
 }

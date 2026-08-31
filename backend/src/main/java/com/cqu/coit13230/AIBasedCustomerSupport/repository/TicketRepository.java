@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 
 /**
  * Repository interface for managing {@link Ticket} entities.
@@ -16,9 +17,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
  * </p>
  *
  * <p>
- * The repository also provides customer-specific queries used
- * to retrieve the support ticket history of an authenticated
- * customer.
+ * The repository also provides customer-specific and status-based
+ * queries used by customer and support-agent workflows.
  * </p>
  */
 @Repository
@@ -31,5 +31,21 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
      * @param customerId unique identifier of the customer
      * @return list of tickets belonging to the specified customer
      */
-    List<Ticket> findByCustomerUserIdOrderByCreatedAtDesc(Long customerId);
+    List<Ticket> findByCustomerUserIdOrderByCreatedAtDesc(
+            Long customerId);
+
+    /**
+     * Retrieves all tickets with the specified status,
+     * ordered from the oldest ticket to the newest.
+     *
+     * <p>
+     * This query is used by support agents to retrieve tickets
+     * that require human intervention, such as escalated tickets.
+     * </p>
+     *
+     * @param status lifecycle status used to filter tickets
+     * @return list of tickets matching the specified status
+     */
+    List<Ticket> findByStatusOrderByCreatedAtAsc(
+            TicketStatus status);
 }
