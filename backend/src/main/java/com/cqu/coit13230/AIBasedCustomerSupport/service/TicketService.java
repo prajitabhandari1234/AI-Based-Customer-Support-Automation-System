@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentTicketUpdateRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ForbiddenOperationException;
@@ -429,6 +430,103 @@ public class TicketService {
 
         ticket.setAssignedAgent(agent);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
+
+        return ticketRepository.save(ticket);
+        }
+
+        /**
+         * Updates the status and resolution information of a ticket
+         * assigned to the authenticated support agent.
+         *
+         * <p>
+         * The authenticated support agent is identified using the email
+         * address obtained from JWT authentication. A support agent may
+         * only update tickets currently assigned to them.
+         * </p>
+         *
+         * <p>
+         * Supported status transitions include
+         * {@link TicketStatus#IN_PROGRESS},
+         * {@link TicketStatus#ON_HOLD},
+         * {@link TicketStatus#RESOLVED}, and
+         * {@link TicketStatus#CLOSED}.
+         * </p>
+         *
+         * @param ticketId unique identifier of the ticket
+         * @param request updated ticket status and resolution information
+         * @param agentEmail email address of the authenticated support agent
+         * @return updated support ticket
+         * @throws ResourceNotFoundException if the agent or ticket cannot be found
+         * @throws ForbiddenOperationException if the ticket is not assigned
+         *         to the authenticated support agent or the requested status
+         *         is not permitted
+         */
+        public Ticket updateAssignedTicket(
+                Long ticketId,
+                AgentTicketUpdateRequest request,
+                String agentEmail) {
+
+        String normalizedEmail = agentEmail
+                .trim()
+                .toLowerCase();
+
+        User agent = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Support agent not found with email: "
+                                        + normalizedEmail));
+
+        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+                throw new ForbiddenOperationException(
+                        "Only support agents can update assigned tickets");
+        }
+
+        Ticket ticket = ticketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Ticket not found with ID: "
+                                        + ticketId));
+
+        if (ticket.getAssignedAgent() == null
+                || !ticket.getAssignedAgent()
+                        .getUserId()
+                        .equals(agent.getUserId())) {
+
+                throw new ForbiddenOperationException(
+                        "Ticket is not assigned to the authenticated support agent");
+        }
+
+        TicketStatus newStatus = request.getStatus();
+
+        if (newStatus != TicketStatus.IN_PROGRESS
+                && newStatus != TicketStatus.ON_HOLD
+                && newStatus != TicketStatus.RESOLVED
+                && newStatus != TicketStatus.CLOSED) {
+
+                throw new ForbiddenOperationException(
+                        "Support agent cannot change ticket to status: "
+                                + newStatus);
+        }
+
+        if ((newStatus == TicketStatus.RESOLVED
+                || newStatus == TicketStatus.CLOSED)
+                && (request.getResolutionNotes() == null
+                || request.getResolutionNotes().isBlank())) {
+
+                throw new IllegalArgumentException(
+                        "Resolution notes are required when resolving or closing a ticket");
+        }
+
+        ticket.setStatus(newStatus);
+
+        if (request.getResolutionNotes() != null
+                && !request.getResolutionNotes().isBlank()) {
+
+                ticket.setResolutionNotes(
+                        request.getResolutionNotes().trim());
+        }
 
         return ticketRepository.save(ticket);
         }
