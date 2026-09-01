@@ -13,6 +13,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -44,11 +46,13 @@ public class Conversation {
      *
      * <p>Multiple conversations may belong to the same customer.</p>
      */
+    @NotNull(message = "Customer is required")
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
     private User customer;
 
     /** Current status of the conversation. */
+    @NotNull(message = "Conversation status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ConversationStatus status = ConversationStatus.ACTIVE;

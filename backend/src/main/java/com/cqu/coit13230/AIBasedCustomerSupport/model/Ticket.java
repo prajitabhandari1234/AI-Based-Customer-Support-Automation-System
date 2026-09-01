@@ -15,6 +15,10 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -54,6 +58,7 @@ public class Ticket {
      * <p>Each ticket is associated with one conversation, and a
      * conversation can generate at most one support ticket.</p>
      */
+    @NotNull(message = "Conversation is required")
     @OneToOne
     @JoinColumn(name = "conversation_id", nullable = false, unique = true)
     private Conversation conversation;
@@ -63,6 +68,7 @@ public class Ticket {
      *
      * <p>A customer may have multiple support tickets over time.</p>
      */
+    @NotNull(message = "Customer is required")
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
     private User customer;
@@ -80,6 +86,7 @@ public class Ticket {
     /**
      * Category used to classify the type of customer issue.
      */
+    @NotNull(message = "Ticket category is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private TicketCategory category;
@@ -87,6 +94,7 @@ public class Ticket {
     /**
      * Priority level indicating the urgency of the support ticket.
      */
+    @NotNull(message = "Ticket priority is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TicketPriority priority;
@@ -94,6 +102,7 @@ public class Ticket {
     /**
      * Current lifecycle status of the support ticket.
      */
+    @NotNull(message = "Ticket status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TicketStatus status = TicketStatus.OPEN;
@@ -104,6 +113,14 @@ public class Ticket {
      * <p>This value may be {@code null} when sentiment analysis has
      * not yet been performed.</p>
      */
+    @DecimalMin(
+            value = "-1.0",
+            message = "Sentiment score must be between -1.0 and 1.0"
+    )
+    @DecimalMax(
+            value = "1.0",
+            message = "Sentiment score must be between -1.0 and 1.0"
+    )
     private Double sentimentScore;
 
     /**
@@ -112,6 +129,14 @@ public class Ticket {
      * <p>This value may be {@code null} when AI analysis has not yet
      * been performed.</p>
      */
+    @DecimalMin(
+            value = "0.0",
+            message = "AI confidence score must be between 0.0 and 1.0"
+    )
+    @DecimalMax(
+            value = "1.0",
+            message = "AI confidence score must be between 0.0 and 1.0"
+    )
     private Double aiConfidenceScore;
 
     /**
