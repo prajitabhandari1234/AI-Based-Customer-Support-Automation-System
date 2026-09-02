@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentMessageRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentTicketUpdateRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
@@ -11,6 +12,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.exception.ForbiddenOperationExce
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.SenderType;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
@@ -29,11 +31,10 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * </p>
  *
  * <p>
- * The service also provides secure customer-specific ticket operations,
- * including ticket creation, ticket history retrieval, and detailed
- * ticket views with associated conversation message history.
- * Customer identity is obtained from JWT authentication rather than
- * being supplied directly by the client.
+ * The service also provides secure customer-specific and
+ * support-agent-specific ticket operations. Customer and support-agent
+ * identities are obtained from JWT authentication rather than being
+ * supplied directly by the client.
  * </p>
  */
 @Service
@@ -90,20 +91,9 @@ public class TicketService {
      * before creating the ticket.
      * </p>
      *
-     * <p>
-     * New customer tickets are automatically created with an
-     * {@link TicketStatus#OPEN} status and are initially left
-     * unassigned. AI analysis and resolution information may be added
-     * later during ticket processing.
-     * </p>
-     *
      * @param request information required to create the ticket
      * @param customerEmail email address of the authenticated customer
      * @return the newly created support ticket
-     * @throws ResourceNotFoundException if the customer or conversation
-     *         cannot be found
-     * @throws ForbiddenOperationException if the conversation does not
-     *         belong to the authenticated customer
      */
     public Ticket createCustomerTicket(
             CreateTicketRequest request,
@@ -150,22 +140,8 @@ public class TicketService {
     /**
      * Retrieves the support ticket history of an authenticated customer.
      *
-     * <p>
-     * The customer is identified using the email address obtained from
-     * the authenticated JWT. Only tickets belonging to that customer
-     * are returned, preventing customers from viewing tickets owned by
-     * other users.
-     * </p>
-     *
-     * <p>
-     * Tickets are returned from the most recently created ticket to
-     * the oldest ticket.
-     * </p>
-     *
      * @param customerEmail email address of the authenticated customer
      * @return list of support tickets belonging to the customer
-     * @throws ResourceNotFoundException if the authenticated customer
-     *         cannot be found
      */
     public List<Ticket> getCustomerTicketHistory(
             String customerEmail) {
@@ -190,26 +166,9 @@ public class TicketService {
      * Retrieves detailed ticket information and the associated
      * conversation history for an authenticated customer.
      *
-     * <p>
-     * The customer is identified using the email address stored in the
-     * authenticated JWT. The requested ticket is retrieved and ownership
-     * is verified before any ticket or conversation information is
-     * returned.
-     * </p>
-     *
-     * <p>
-     * If the ticket belongs to the authenticated customer, all messages
-     * belonging to the ticket's conversation are retrieved in
-     * chronological order from oldest to newest.
-     * </p>
-     *
      * @param ticketId unique identifier of the requested ticket
      * @param customerEmail email address of the authenticated customer
      * @return ticket details together with conversation message history
-     * @throws ResourceNotFoundException if the customer or ticket
-     *         cannot be found
-     * @throws ForbiddenOperationException if the ticket does not belong
-     *         to the authenticated customer
      */
     public TicketDetailsResponse getCustomerTicketDetails(
             Long ticketId,
@@ -257,16 +216,8 @@ public class TicketService {
     /**
      * Creates or updates a support ticket.
      *
-     * <p>
-     * Verifies that the referenced conversation and customer exist.
-     * If an assigned support agent is provided, that user is also
-     * verified before the ticket is saved.
-     * </p>
-     *
      * @param ticket ticket to be saved
      * @return saved ticket
-     * @throws ResourceNotFoundException if the conversation, customer,
-     *         or assigned agent cannot be found
      */
     public Ticket saveTicket(Ticket ticket) {
 
@@ -333,7 +284,6 @@ public class TicketService {
      *
      * @param ticketId unique identifier of the ticket
      * @return ticket associated with the specified identifier
-     * @throws ResourceNotFoundException if the ticket cannot be found
      */
     public Ticket getTicketById(Long ticketId) {
 
@@ -354,51 +304,30 @@ public class TicketService {
         ticketRepository.deleteById(ticketId);
     }
 
-        /**
-         * Retrieves all support tickets that have been escalated for
-         * human assistance.
-         *
-         * <p>
-         * Escalated tickets are returned from the oldest to the newest so
-         * that support agents can prioritise tickets that have been waiting
-         * the longest.
-         * </p>
-         *
-         * @return list of tickets with {@link TicketStatus#ESCALATED} status
-         */
-        public List<Ticket> getEscalatedTickets() {
+    /**
+     * Retrieves all support tickets that have been escalated for
+     * human assistance.
+     *
+     * @return list of tickets with {@link TicketStatus#ESCALATED} status
+     */
+    public List<Ticket> getEscalatedTickets() {
 
         return ticketRepository
                 .findByStatusOrderByCreatedAtAsc(
                         TicketStatus.ESCALATED);
-        }
+    }
 
-        /**
-         * Assigns an escalated support ticket to the authenticated
-         * support agent.
-         *
-         * <p>
-         * The support agent is identified using the email address obtained
-         * from JWT authentication. Only users with the
-         * {@link UserRole#SUPPORT_AGENT} role can assign tickets.
-         * </p>
-         *
-         * <p>
-         * Only tickets with {@link TicketStatus#ESCALATED} status can be
-         * assigned. After successful assignment, the ticket status is
-         * changed to {@link TicketStatus#IN_PROGRESS}.
-         * </p>
-         *
-         * @param ticketId unique identifier of the ticket to assign
-         * @param agentEmail email address of the authenticated support agent
-         * @return updated ticket containing the assigned support agent
-         * @throws ResourceNotFoundException if the agent or ticket cannot be found
-         * @throws ForbiddenOperationException if the user is not a support agent
-         *         or the ticket cannot currently be assigned
-         */
-        public Ticket assignTicketToAgent(
-                Long ticketId,
-                String agentEmail) {
+    /**
+     * Assigns an escalated support ticket to the authenticated
+     * support agent.
+     *
+     * @param ticketId unique identifier of the ticket to assign
+     * @param agentEmail email address of the authenticated support agent
+     * @return updated ticket containing the assigned support agent
+     */
+    public Ticket assignTicketToAgent(
+            Long ticketId,
+            String agentEmail) {
 
         String normalizedEmail = agentEmail
                 .trim()
@@ -412,8 +341,8 @@ public class TicketService {
                                         + normalizedEmail));
 
         if (agent.getRole() != UserRole.SUPPORT_AGENT) {
-                throw new ForbiddenOperationException(
-                        "Only support agents can assign tickets");
+            throw new ForbiddenOperationException(
+                    "Only support agents can assign tickets");
         }
 
         Ticket ticket = ticketRepository
@@ -424,47 +353,29 @@ public class TicketService {
                                         + ticketId));
 
         if (ticket.getStatus() != TicketStatus.ESCALATED) {
-                throw new ForbiddenOperationException(
-                        "Only escalated tickets can be assigned");
+            throw new ForbiddenOperationException(
+                    "Only escalated tickets can be assigned");
         }
 
         ticket.setAssignedAgent(agent);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
 
         return ticketRepository.save(ticket);
-        }
+    }
 
-        /**
-         * Updates the status and resolution information of a ticket
-         * assigned to the authenticated support agent.
-         *
-         * <p>
-         * The authenticated support agent is identified using the email
-         * address obtained from JWT authentication. A support agent may
-         * only update tickets currently assigned to them.
-         * </p>
-         *
-         * <p>
-         * Supported status transitions include
-         * {@link TicketStatus#IN_PROGRESS},
-         * {@link TicketStatus#ON_HOLD},
-         * {@link TicketStatus#RESOLVED}, and
-         * {@link TicketStatus#CLOSED}.
-         * </p>
-         *
-         * @param ticketId unique identifier of the ticket
-         * @param request updated ticket status and resolution information
-         * @param agentEmail email address of the authenticated support agent
-         * @return updated support ticket
-         * @throws ResourceNotFoundException if the agent or ticket cannot be found
-         * @throws ForbiddenOperationException if the ticket is not assigned
-         *         to the authenticated support agent or the requested status
-         *         is not permitted
-         */
-        public Ticket updateAssignedTicket(
-                Long ticketId,
-                AgentTicketUpdateRequest request,
-                String agentEmail) {
+    /**
+     * Updates the status and resolution information of a ticket
+     * assigned to the authenticated support agent.
+     *
+     * @param ticketId unique identifier of the ticket
+     * @param request updated ticket status and resolution information
+     * @param agentEmail email address of the authenticated support agent
+     * @return updated support ticket
+     */
+    public Ticket updateAssignedTicket(
+            Long ticketId,
+            AgentTicketUpdateRequest request,
+            String agentEmail) {
 
         String normalizedEmail = agentEmail
                 .trim()
@@ -478,8 +389,8 @@ public class TicketService {
                                         + normalizedEmail));
 
         if (agent.getRole() != UserRole.SUPPORT_AGENT) {
-                throw new ForbiddenOperationException(
-                        "Only support agents can update assigned tickets");
+            throw new ForbiddenOperationException(
+                    "Only support agents can update assigned tickets");
         }
 
         Ticket ticket = ticketRepository
@@ -494,8 +405,8 @@ public class TicketService {
                         .getUserId()
                         .equals(agent.getUserId())) {
 
-                throw new ForbiddenOperationException(
-                        "Ticket is not assigned to the authenticated support agent");
+            throw new ForbiddenOperationException(
+                    "Ticket is not assigned to the authenticated support agent");
         }
 
         TicketStatus newStatus = request.getStatus();
@@ -505,9 +416,9 @@ public class TicketService {
                 && newStatus != TicketStatus.RESOLVED
                 && newStatus != TicketStatus.CLOSED) {
 
-                throw new ForbiddenOperationException(
-                        "Support agent cannot change ticket to status: "
-                                + newStatus);
+            throw new ForbiddenOperationException(
+                    "Support agent cannot change ticket to status: "
+                            + newStatus);
         }
 
         if ((newStatus == TicketStatus.RESOLVED
@@ -515,8 +426,8 @@ public class TicketService {
                 && (request.getResolutionNotes() == null
                 || request.getResolutionNotes().isBlank())) {
 
-                throw new IllegalArgumentException(
-                        "Resolution notes are required when resolving or closing a ticket");
+            throw new IllegalArgumentException(
+                    "Resolution notes are required when resolving or closing a ticket");
         }
 
         ticket.setStatus(newStatus);
@@ -524,10 +435,82 @@ public class TicketService {
         if (request.getResolutionNotes() != null
                 && !request.getResolutionNotes().isBlank()) {
 
-                ticket.setResolutionNotes(
-                        request.getResolutionNotes().trim());
+            ticket.setResolutionNotes(
+                    request.getResolutionNotes().trim());
         }
 
         return ticketRepository.save(ticket);
+    }
+
+    /**
+     * Sends a response from the authenticated support agent to the
+     * conversation associated with an assigned support ticket.
+     *
+     * <p>
+     * The support agent is identified using the email address obtained
+     * from JWT authentication. Only the support agent currently assigned
+     * to the ticket is permitted to send a response.
+     * </p>
+     *
+     * <p>
+     * The response is stored as a new conversation message with
+     * {@link SenderType#SUPPORT_AGENT} as its sender type.
+     * </p>
+     *
+     * @param ticketId unique identifier of the support ticket
+     * @param request request containing the support agent's response
+     * @param agentEmail email address of the authenticated support agent
+     * @return the newly created support-agent message
+     * @throws ResourceNotFoundException if the support agent or ticket
+     *         cannot be found
+     * @throws ForbiddenOperationException if the ticket is not assigned
+     *         to the authenticated support agent
+     */
+    public Message sendAgentResponse(
+            Long ticketId,
+            AgentMessageRequest request,
+            String agentEmail) {
+
+        String normalizedEmail = agentEmail
+                .trim()
+                .toLowerCase();
+
+        User agent = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Support agent not found with email: "
+                                        + normalizedEmail));
+
+        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+            throw new ForbiddenOperationException(
+                    "Only support agents can send ticket responses");
         }
+
+        Ticket ticket = ticketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Ticket not found with ID: "
+                                        + ticketId));
+
+        if (ticket.getAssignedAgent() == null
+                || !ticket.getAssignedAgent()
+                        .getUserId()
+                        .equals(agent.getUserId())) {
+
+            throw new ForbiddenOperationException(
+                    "Ticket is not assigned to the authenticated support agent");
+        }
+
+        Message message = new Message();
+
+        message.setConversation(ticket.getConversation());
+        message.setSenderUser(agent);
+        message.setSenderType(SenderType.SUPPORT_AGENT);
+        message.setContent(request.getContent().trim());
+        message.setSentimentScore(null);
+
+        return messageRepository.save(message);
+    }
 }

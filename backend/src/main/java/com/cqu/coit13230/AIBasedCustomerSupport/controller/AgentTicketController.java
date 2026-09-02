@@ -2,16 +2,20 @@ package com.cqu.coit13230.AIBasedCustomerSupport.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentMessageRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentTicketUpdateRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.TicketService;
 
@@ -106,5 +110,30 @@ public class AgentTicketController {
                         authentication.getName());
 
         return ResponseEntity.ok(updatedTicket);
+    }
+
+    /**
+     * Sends a response from the authenticated support agent
+     * to the conversation associated with a support ticket.
+     *
+     * @param ticketId unique identifier of the support ticket
+     * @param request request containing the response message
+     * @param authentication authenticated support-agent information
+     * @return the newly created support-agent message
+     */
+    @PostMapping("/{ticketId}/messages")
+    public ResponseEntity<Message> sendAgentResponse(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody AgentMessageRequest request,
+            Authentication authentication) {
+
+        Message message = ticketService.sendAgentResponse(
+                ticketId,
+                request,
+                authentication.getName());
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(message);
     }
 }
