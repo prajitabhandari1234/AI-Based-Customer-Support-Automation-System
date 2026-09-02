@@ -36,6 +36,11 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * identities are obtained from JWT authentication rather than being
  * supplied directly by the client.
  * </p>
+ *
+ * <p>
+ * Ticket-related events may also generate notifications for customers
+ * through the {@link NotificationService}.
+ * </p>
  */
 @Service
 public class TicketService {
@@ -61,24 +66,32 @@ public class TicketService {
     private final MessageRepository messageRepository;
 
     /**
+     * Service used to generate ticket-related notifications.
+     */
+    private final NotificationService notificationService;
+
+    /**
      * Constructs a new {@code TicketService} with the required
-     * repository dependencies.
+     * repository and service dependencies.
      *
      * @param ticketRepository repository used to access ticket data
      * @param conversationRepository repository used to access conversation data
      * @param userRepository repository used to access user data
      * @param messageRepository repository used to access message data
+     * @param notificationService service used to generate ticket notifications
      */
     public TicketService(
             TicketRepository ticketRepository,
             ConversationRepository conversationRepository,
             UserRepository userRepository,
-            MessageRepository messageRepository) {
+            MessageRepository messageRepository,
+            NotificationService notificationService) {
 
         this.ticketRepository = ticketRepository;
         this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -94,6 +107,10 @@ public class TicketService {
      * @param request information required to create the ticket
      * @param customerEmail email address of the authenticated customer
      * @return the newly created support ticket
+     * @throws ResourceNotFoundException if the customer or conversation
+     *         cannot be found
+     * @throws ForbiddenOperationException if the conversation does not
+     *         belong to the authenticated customer
      */
     public Ticket createCustomerTicket(
             CreateTicketRequest request,
@@ -142,6 +159,8 @@ public class TicketService {
      *
      * @param customerEmail email address of the authenticated customer
      * @return list of support tickets belonging to the customer
+     * @throws ResourceNotFoundException if the authenticated customer
+     *         cannot be found
      */
     public List<Ticket> getCustomerTicketHistory(
             String customerEmail) {
@@ -169,6 +188,10 @@ public class TicketService {
      * @param ticketId unique identifier of the requested ticket
      * @param customerEmail email address of the authenticated customer
      * @return ticket details together with conversation message history
+     * @throws ResourceNotFoundException if the customer or ticket
+     *         cannot be found
+     * @throws ForbiddenOperationException if the ticket does not belong
+     *         to the authenticated customer
      */
     public TicketDetailsResponse getCustomerTicketDetails(
             Long ticketId,
@@ -216,8 +239,14 @@ public class TicketService {
     /**
      * Creates or updates a support ticket.
      *
+     * <p>
+     * The referenced conversation, customer, and optionally assigned
+     * support agent are verified before the ticket is persisted.
+     * </p>
+     *
      * @param ticket ticket to be saved
      * @return saved ticket
+     * @throws ResourceNotFoundException if referenced entities cannot be found
      */
     public Ticket saveTicket(Ticket ticket) {
 
@@ -284,6 +313,7 @@ public class TicketService {
      *
      * @param ticketId unique identifier of the ticket
      * @return ticket associated with the specified identifier
+     * @throws ResourceNotFoundException if the ticket cannot be found
      */
     public Ticket getTicketById(Long ticketId) {
 
@@ -321,9 +351,23 @@ public class TicketService {
      * Assigns an escalated support ticket to the authenticated
      * support agent.
      *
+     * <p>
+     * The support agent is identified from JWT authentication.
+     * Only tickets with {@link TicketStatus#ESCALATED} status may
+     * be assigned.
+     * </p>
+     *
+     * <p>
+     * Following successful assignment, the ticket is moved to
+     * {@link TicketStatus#IN_PROGRESS} and the customer receives
+     * an unread notification informing them of the assignment.
+     * </p>
+     *
      * @param ticketId unique identifier of the ticket to assign
      * @param agentEmail email address of the authenticated support agent
      * @return updated ticket containing the assigned support agent
+     * @throws ResourceNotFoundException if the agent or ticket cannot be found
+     * @throws ForbiddenOperationException if assignment is not permitted
      */
     public Ticket assignTicketToAgent(
             Long ticketId,
@@ -360,17 +404,42 @@ public class TicketService {
         ticket.setAssignedAgent(agent);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
 
-        return ticketRepository.save(ticket);
+        Ticket savedTicket = ticketRepository.save(ticket);
+
+        notificationService.createTicketNotification(
+                savedTicket.getCustomer(),
+                savedTicket,
+                "A support agent has been assigned to your ticket.");
+
+        return savedTicket;
     }
 
     /**
      * Updates the status and resolution information of a ticket
      * assigned to the authenticated support agent.
      *
+     * <p>
+     * Only the support agent currently assigned to the ticket is
+     * permitted to perform the update. Supported status changes include
+     * {@link TicketStatus#IN_PROGRESS},
+     * {@link TicketStatus#ON_HOLD},
+     * {@link TicketStatus#RESOLVED}, and
+     * {@link TicketStatus#CLOSED}.
+     * </p>
+     *
+     * <p>
+     * Resolution notes are required when a ticket is moved to
+     * {@link TicketStatus#RESOLVED} or {@link TicketStatus#CLOSED}.
+     * After the ticket is successfully updated, an unread notification
+     * is generated for the customer informing them of the status change.
+     * </p>
+     *
      * @param ticketId unique identifier of the ticket
      * @param request updated ticket status and resolution information
      * @param agentEmail email address of the authenticated support agent
      * @return updated support ticket
+     * @throws ResourceNotFoundException if the agent or ticket cannot be found
+     * @throws ForbiddenOperationException if the ticket cannot be updated
      */
     public Ticket updateAssignedTicket(
             Long ticketId,
@@ -439,7 +508,40 @@ public class TicketService {
                     request.getResolutionNotes().trim());
         }
 
-        return ticketRepository.save(ticket);
+        Ticket savedTicket = ticketRepository.save(ticket);
+
+        /*
+         * Determines the customer notification message based on the
+         * newly updated ticket status.
+         */
+        String notificationMessage = switch (newStatus) {
+            case IN_PROGRESS ->
+                    "Your ticket is now being worked on.";
+
+            case ON_HOLD ->
+                    "Your ticket has been placed on hold.";
+
+            case RESOLVED ->
+                    "Your ticket has been resolved.";
+
+            case CLOSED ->
+                    "Your ticket has been closed.";
+
+            default -> null;
+        };
+
+        /*
+         * Generates an unread notification for the customer after
+         * the ticket status has been successfully updated.
+         */
+        if (notificationMessage != null) {
+            notificationService.createTicketNotification(
+                    savedTicket.getCustomer(),
+                    savedTicket,
+                    notificationMessage);
+        }
+
+        return savedTicket;
     }
 
     /**
