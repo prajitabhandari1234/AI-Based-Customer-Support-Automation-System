@@ -97,6 +97,38 @@ public class SecurityConfig {
                         .hasRole("CUSTOMER")
 
                         /*
+                         * Generic ticket endpoints are restricted to
+                         * administrators. Customers and support agents
+                         * should use their role-specific ticket APIs.
+                         */
+                        .requestMatchers("/api/tickets/**")
+                        .hasRole("ADMIN")
+
+                        /*
+                         * Generic conversation endpoints are restricted
+                         * to administrators to prevent users from
+                         * accessing conversations outside their role.
+                         */
+                        .requestMatchers("/api/conversations/**")
+                        .hasRole("ADMIN")
+
+                        /*
+                         * Generic message endpoints are restricted to
+                         * administrators. Customer and agent message
+                         * operations should use secure role-specific APIs.
+                         */
+                        .requestMatchers("/api/messages/**")
+                        .hasRole("ADMIN")
+
+                        /*
+                         * Generic notification endpoints are restricted
+                         * to administrators. Customers and support agents
+                         * access notifications through role-specific APIs.
+                         */
+                        .requestMatchers("/api/notifications/**")
+                        .hasRole("ADMIN")
+
+                        /*
                          * Knowledge base entries may be viewed by any
                          * authenticated user.
                          */
