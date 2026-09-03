@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -14,8 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Global exception handler for REST API errors.
  *
  * <p>
- * Converts validation and application exceptions into structured
- * JSON responses that are easier for API clients to understand.
+ * Converts validation, authentication, authorization, application,
+ * and unexpected exceptions into consistent structured JSON responses.
  * </p>
  */
 @RestControllerAdvice
@@ -25,7 +26,7 @@ public class GlobalExceptionHandler {
      * Handles validation errors produced by {@code @Valid} request bodies.
      *
      * @param ex validation exception
-     * @return structured validation error response
+     * @return structured HTTP 400 validation error response
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationErrors(
@@ -46,6 +47,58 @@ public class GlobalExceptionHandler {
         response.put("status", HttpStatus.BAD_REQUEST.value());
         response.put("error", "Validation Failed");
         response.put("errors", errors);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(response);
+    }
+
+    /**
+     * Handles malformed JSON request bodies and invalid request values,
+     * including values that cannot be converted to enum constants.
+     *
+     * @param ex unreadable request body exception
+     * @return structured HTTP 400 bad request response
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMalformedRequest(
+            HttpMessageNotReadableException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("error", "Bad Request");
+        response.put(
+                "message",
+                "The request body is missing, malformed, or contains an invalid value.");
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(response);
+    }
+
+    /**
+     * Handles invalid business input supplied to service operations.
+     *
+     * <p>
+     * This includes cases where a request is syntactically valid but
+     * does not satisfy required business rules.
+     * </p>
+     *
+     * @param ex illegal argument exception
+     * @return structured HTTP 400 bad request response
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("error", "Bad Request");
+        response.put("message", ex.getMessage());
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
@@ -76,11 +129,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles attempts to create resources that already exist.
-     *
-     * <p>
-     * This is used when a unique resource, such as a user email address,
-     * is already registered in the system.
-     * </p>
      *
      * @param ex duplicate resource exception
      * @return structured HTTP 409 conflict response
@@ -123,15 +171,16 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(response);
     }
-        /**
-         * Handles authentication attempts made by inactive user accounts.
-         *
-         * @param ex account inactive exception
-         * @return structured HTTP 403 forbidden response
-         */
-        @ExceptionHandler(AccountInactiveException.class)
-        public ResponseEntity<Map<String, Object>> handleAccountInactive(
-                AccountInactiveException ex) {
+
+    /**
+     * Handles authentication attempts made by inactive user accounts.
+     *
+     * @param ex account inactive exception
+     * @return structured HTTP 403 forbidden response
+     */
+    @ExceptionHandler(AccountInactiveException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountInactive(
+            AccountInactiveException ex) {
 
         Map<String, Object> response = new LinkedHashMap<>();
 
@@ -143,23 +192,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(response);
-        }
+    }
 
-        /**
-         * Handles operations that are forbidden for the authenticated user.
-         *
-         * <p>
-         * This exception is used when a user is successfully authenticated
-         * but attempts to access or modify a resource that they are not
-         * authorised to use.
-         * </p>
-         *
-         * @param ex forbidden operation exception
-         * @return structured HTTP 403 forbidden response
-         */
-        @ExceptionHandler(ForbiddenOperationException.class)
-        public ResponseEntity<Map<String, Object>> handleForbiddenOperation(
-                ForbiddenOperationException ex) {
+    /**
+     * Handles operations that are forbidden for the authenticated user.
+     *
+     * @param ex forbidden operation exception
+     * @return structured HTTP 403 forbidden response
+     */
+    @ExceptionHandler(ForbiddenOperationException.class)
+    public ResponseEntity<Map<String, Object>> handleForbiddenOperation(
+            ForbiddenOperationException ex) {
 
         Map<String, Object> response = new LinkedHashMap<>();
 
@@ -171,5 +214,37 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(response);
-        }
+    }
+
+    /**
+     * Handles unexpected application errors that are not covered by a more
+     * specific exception handler.
+     *
+     * <p>
+     * Internal exception details are intentionally not returned to the
+     * client to avoid exposing implementation details or stack traces.
+     * </p>
+     *
+     * @param ex unexpected exception
+     * @return structured HTTP 500 internal server error response
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleUnexpectedException(
+            Exception ex) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("timestamp", LocalDateTime.now());
+        response.put(
+                "status",
+                HttpStatus.INTERNAL_SERVER_ERROR.value());
+        response.put("error", "Internal Server Error");
+        response.put(
+                "message",
+                "An unexpected error occurred while processing the request.");
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(response);
+    }
 }
