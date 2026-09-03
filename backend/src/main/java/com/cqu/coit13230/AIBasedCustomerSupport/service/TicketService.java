@@ -17,6 +17,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.ConversationRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.MessageRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
@@ -27,7 +28,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  *
  * <p>
  * Provides business-layer operations for creating, retrieving,
- * updating, and deleting customer support tickets.
+ * updating, escalating, assigning, and managing customer support tickets.
  * </p>
  *
  * <p>
@@ -38,8 +39,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * </p>
  *
  * <p>
- * Ticket-related events may also generate notifications for customers
- * through the {@link NotificationService}.
+ * Ticket-related events may generate notifications for customers
+ * and support agents through the {@link NotificationService}.
  * </p>
  */
 @Service
@@ -328,10 +329,73 @@ public class TicketService {
     /**
      * Deletes a support ticket by its identifier.
      *
-     * @param ticketId identifier of the ticket to delete
+     * @param ticketId identifier of the notification to delete
      */
     public void deleteTicket(Long ticketId) {
         ticketRepository.deleteById(ticketId);
+    }
+
+    /**
+     * Escalates an open support ticket for human assistance and
+     * notifies all active support agents.
+     *
+     * <p>
+     * Only a ticket currently in {@link TicketStatus#OPEN} status
+     * can be escalated. After successful escalation, the ticket is
+     * changed to {@link TicketStatus#ESCALATED} and persisted.
+     * </p>
+     *
+     * <p>
+     * Every active user with the {@link UserRole#SUPPORT_AGENT}
+     * role receives an unread notification informing them that
+     * the escalated ticket requires human assistance.
+     * </p>
+     *
+     * <p>
+     * This method is intended to be called by backend escalation
+     * workflows, including AI-based escalation decisions and
+     * business-rule-based escalation.
+     * </p>
+     *
+     * @param ticketId unique identifier of the ticket to escalate
+     * @return the escalated support ticket
+     * @throws ResourceNotFoundException if the ticket cannot be found
+     * @throws ForbiddenOperationException if the ticket is not open
+     */
+    public Ticket escalateTicket(Long ticketId) {
+
+        Ticket ticket = ticketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Ticket not found with ID: "
+                                        + ticketId));
+
+        if (ticket.getStatus() != TicketStatus.OPEN) {
+            throw new ForbiddenOperationException(
+                    "Only open tickets can be escalated");
+        }
+
+        ticket.setStatus(TicketStatus.ESCALATED);
+
+        Ticket savedTicket = ticketRepository.save(ticket);
+
+        List<User> activeSupportAgents =
+                userRepository.findByRoleAndStatus(
+                        UserRole.SUPPORT_AGENT,
+                        UserStatus.ACTIVE);
+
+        for (User agent : activeSupportAgents) {
+
+            notificationService.createTicketNotification(
+                    agent,
+                    savedTicket,
+                    "New escalated ticket #"
+                            + savedTicket.getTicketId()
+                            + " requires human assistance.");
+        }
+
+        return savedTicket;
     }
 
     /**
@@ -515,6 +579,7 @@ public class TicketService {
          * newly updated ticket status.
          */
         String notificationMessage = switch (newStatus) {
+
             case IN_PROGRESS ->
                     "Your ticket is now being worked on.";
 
@@ -535,6 +600,7 @@ public class TicketService {
          * the ticket status has been successfully updated.
          */
         if (notificationMessage != null) {
+
             notificationService.createTicketNotification(
                     savedTicket.getCustomer(),
                     savedTicket,
@@ -544,33 +610,33 @@ public class TicketService {
         return savedTicket;
     }
 
-   /**
-    * Sends a response from the authenticated support agent to the
-    * conversation associated with an assigned support ticket.
-    * 
-    * <p>
-    * The support agent is identified using the email address obtained
-    * from JWT authentication. Only the support agent currently assigned
-    * to the ticket is permitted to send a response.
-    * </p>
-    * 
-    * <p>
-    * The response is stored as a new conversation message with
-    * {@link SenderType#SUPPORT_AGENT} as its sender type. After the
-    * message is successfully saved, the customer receives an unread
-    * notification informing them that a new support-agent response
-    * is available.
-    * </p>
-    * 
-    * @param ticketId unique identifier of the support ticket
-    * @param request request containing the support agent's response
-    * @param agentEmail email address of the authenticated support agent
-    * @return newly created support-agent message
-    * @throws ResourceNotFoundException if the support agent or ticket
-    *      cannot be found
-    * @throws ForbiddenOperationException if the ticket is not assigned
-    *      to the authenticated support agent
-    * */
+    /**
+     * Sends a response from the authenticated support agent to the
+     * conversation associated with an assigned support ticket.
+     *
+     * <p>
+     * The support agent is identified using the email address obtained
+     * from JWT authentication. Only the support agent currently assigned
+     * to the ticket is permitted to send a response.
+     * </p>
+     *
+     * <p>
+     * The response is stored as a new conversation message with
+     * {@link SenderType#SUPPORT_AGENT} as its sender type. After the
+     * message is successfully saved, the customer receives an unread
+     * notification informing them that a new support-agent response
+     * is available.
+     * </p>
+     *
+     * @param ticketId unique identifier of the support ticket
+     * @param request request containing the support agent's response
+     * @param agentEmail email address of the authenticated support agent
+     * @return newly created support-agent message
+     * @throws ResourceNotFoundException if the support agent or ticket
+     *         cannot be found
+     * @throws ForbiddenOperationException if the ticket is not assigned
+     *         to the authenticated support agent
+     */
     public Message sendAgentResponse(
             Long ticketId,
             AgentMessageRequest request,
@@ -619,14 +685,14 @@ public class TicketService {
         Message savedMessage = messageRepository.save(message);
 
         /*
-        * Notifies the customer that a support agent has sent
-        * a new response regarding the ticket.
-        */
+         * Notifies the customer that a support agent has sent
+         * a new response regarding the ticket.
+         */
         notificationService.createTicketNotification(
                 ticket.getCustomer(),
                 ticket,
                 "You have received a new response from a support agent.");
 
         return savedMessage;
-        }
+    }
 }

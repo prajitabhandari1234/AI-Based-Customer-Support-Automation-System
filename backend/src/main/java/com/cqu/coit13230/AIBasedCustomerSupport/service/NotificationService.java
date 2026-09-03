@@ -10,6 +10,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundExcept
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Notification;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.NotificationRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
@@ -24,10 +25,10 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * </p>
  *
  * <p>
- * The service also provides secure customer-specific operations
- * for retrieving notifications and marking notifications as read.
- * Customer identity is obtained from JWT authentication rather
- * than being supplied directly by the client.
+ * The service also provides secure customer-specific and
+ * support-agent-specific notification operations. User identity
+ * is obtained from JWT authentication rather than being supplied
+ * directly by the client.
  * </p>
  */
 @Service
@@ -114,7 +115,8 @@ public class NotificationService {
      *
      * <p>
      * This method is intended for automatic backend workflows such as
-     * ticket assignment, status changes, resolution, and closure.
+     * ticket escalation, ticket assignment, status changes, agent
+     * responses, resolution, and closure.
      * </p>
      *
      * @param user recipient of the notification
@@ -242,6 +244,113 @@ public class NotificationService {
 
             throw new ForbiddenOperationException(
                     "Notification does not belong to the authenticated customer");
+        }
+
+        notification.setIsRead(true);
+
+        return notificationRepository.save(notification);
+    }
+
+    /**
+     * Retrieves all notifications belonging to the authenticated
+     * support agent.
+     *
+     * <p>
+     * The support agent is identified using the email address obtained
+     * from JWT authentication. Only users with the
+     * {@link UserRole#SUPPORT_AGENT} role may retrieve agent
+     * notifications.
+     * </p>
+     *
+     * <p>
+     * Notifications are returned from newest to oldest.
+     * </p>
+     *
+     * @param agentEmail email address of the authenticated support agent
+     * @return notifications belonging to the authenticated support agent
+     * @throws ResourceNotFoundException if the support agent cannot be found
+     * @throws ForbiddenOperationException if the authenticated user is not
+     *         a support agent
+     */
+    public List<Notification> getAgentNotifications(
+            String agentEmail) {
+
+        String normalizedEmail = agentEmail
+                .trim()
+                .toLowerCase();
+
+        User agent = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Support agent not found with email: "
+                                        + normalizedEmail));
+
+        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+            throw new ForbiddenOperationException(
+                    "Only support agents can access agent notifications");
+        }
+
+        return notificationRepository
+                .findByUserUserIdOrderByCreatedAtDesc(
+                        agent.getUserId());
+    }
+
+    /**
+     * Marks a notification belonging to the authenticated support
+     * agent as read.
+     *
+     * <p>
+     * The method verifies that the authenticated user has the
+     * {@link UserRole#SUPPORT_AGENT} role and that the notification
+     * belongs to that specific support agent.
+     * </p>
+     *
+     * <p>
+     * A support agent cannot modify another user's notification.
+     * </p>
+     *
+     * @param notificationId unique identifier of the notification
+     * @param agentEmail email address of the authenticated support agent
+     * @return updated notification marked as read
+     * @throws ResourceNotFoundException if the support agent or notification
+     *         cannot be found
+     * @throws ForbiddenOperationException if the user is not a support agent
+     *         or does not own the notification
+     */
+    public Notification markAgentNotificationAsRead(
+            Long notificationId,
+            String agentEmail) {
+
+        String normalizedEmail = agentEmail
+                .trim()
+                .toLowerCase();
+
+        User agent = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Support agent not found with email: "
+                                        + normalizedEmail));
+
+        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+            throw new ForbiddenOperationException(
+                    "Only support agents can update agent notifications");
+        }
+
+        Notification notification = notificationRepository
+                .findById(notificationId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Notification not found with ID: "
+                                        + notificationId));
+
+        if (!notification.getUser()
+                .getUserId()
+                .equals(agent.getUserId())) {
+
+            throw new ForbiddenOperationException(
+                    "Notification does not belong to the authenticated support agent");
         }
 
         notification.setIsRead(true);
