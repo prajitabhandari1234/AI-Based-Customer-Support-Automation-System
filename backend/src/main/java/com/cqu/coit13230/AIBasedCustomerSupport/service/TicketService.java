@@ -544,30 +544,33 @@ public class TicketService {
         return savedTicket;
     }
 
-    /**
-     * Sends a response from the authenticated support agent to the
-     * conversation associated with an assigned support ticket.
-     *
-     * <p>
-     * The support agent is identified using the email address obtained
-     * from JWT authentication. Only the support agent currently assigned
-     * to the ticket is permitted to send a response.
-     * </p>
-     *
-     * <p>
-     * The response is stored as a new conversation message with
-     * {@link SenderType#SUPPORT_AGENT} as its sender type.
-     * </p>
-     *
-     * @param ticketId unique identifier of the support ticket
-     * @param request request containing the support agent's response
-     * @param agentEmail email address of the authenticated support agent
-     * @return the newly created support-agent message
-     * @throws ResourceNotFoundException if the support agent or ticket
-     *         cannot be found
-     * @throws ForbiddenOperationException if the ticket is not assigned
-     *         to the authenticated support agent
-     */
+   /**
+    * Sends a response from the authenticated support agent to the
+    * conversation associated with an assigned support ticket.
+    * 
+    * <p>
+    * The support agent is identified using the email address obtained
+    * from JWT authentication. Only the support agent currently assigned
+    * to the ticket is permitted to send a response.
+    * </p>
+    * 
+    * <p>
+    * The response is stored as a new conversation message with
+    * {@link SenderType#SUPPORT_AGENT} as its sender type. After the
+    * message is successfully saved, the customer receives an unread
+    * notification informing them that a new support-agent response
+    * is available.
+    * </p>
+    * 
+    * @param ticketId unique identifier of the support ticket
+    * @param request request containing the support agent's response
+    * @param agentEmail email address of the authenticated support agent
+    * @return newly created support-agent message
+    * @throws ResourceNotFoundException if the support agent or ticket
+    *      cannot be found
+    * @throws ForbiddenOperationException if the ticket is not assigned
+    *      to the authenticated support agent
+    * */
     public Message sendAgentResponse(
             Long ticketId,
             AgentMessageRequest request,
@@ -613,6 +616,17 @@ public class TicketService {
         message.setContent(request.getContent().trim());
         message.setSentimentScore(null);
 
-        return messageRepository.save(message);
-    }
+        Message savedMessage = messageRepository.save(message);
+
+        /*
+        * Notifies the customer that a support agent has sent
+        * a new response regarding the ticket.
+        */
+        notificationService.createTicketNotification(
+                ticket.getCustomer(),
+                ticket,
+                "You have received a new response from a support agent.");
+
+        return savedMessage;
+        }
 }
