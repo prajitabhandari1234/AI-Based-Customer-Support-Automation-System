@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -63,29 +64,77 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // Authentication endpoints are publicly accessible.
+                        /*
+                         * Authentication endpoints are publicly accessible.
+                         */
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login")
                         .permitAll()
 
-                        // User management is restricted to administrators.
+                        /*
+                         * User management is restricted to administrators.
+                         */
                         .requestMatchers("/api/users/**")
                         .hasRole("ADMIN")
 
-                        // Administrator-specific endpoints.
+                        /*
+                         * Administrator-specific endpoints.
+                         */
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
 
-                        // Support-agent endpoints.
+                        /*
+                         * Support-agent endpoints.
+                         */
                         .requestMatchers("/api/agent/**")
                         .hasAnyRole("SUPPORT_AGENT", "ADMIN")
 
-                        // Customer-specific endpoints.
+                        /*
+                         * Customer-specific endpoints.
+                         */
                         .requestMatchers("/api/customer/**")
                         .hasRole("CUSTOMER")
 
-                        // Remaining API endpoints require authentication.
+                        /*
+                         * Knowledge base entries may be viewed by any
+                         * authenticated user.
+                         */
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/knowledge-base/**")
+                        .authenticated()
+
+                        /*
+                         * Only support agents and administrators may
+                         * create knowledge base entries.
+                         */
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/knowledge-base/**")
+                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
+
+                        /*
+                         * Only support agents and administrators may
+                         * update knowledge base entries.
+                         */
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/knowledge-base/**")
+                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
+
+                        /*
+                         * Only support agents and administrators may
+                         * delete knowledge base entries.
+                         */
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/knowledge-base/**")
+                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
+
+                        /*
+                         * Remaining API endpoints require authentication.
+                         */
                         .requestMatchers("/api/**")
                         .authenticated()
 
