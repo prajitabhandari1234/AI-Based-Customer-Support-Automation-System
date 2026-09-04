@@ -41,6 +41,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * <p>
  * Ticket-related events may generate notifications for customers
  * and support agents through the {@link NotificationService}.
+ * Important ticket lifecycle events are also recorded through
+ * {@link SystemLogService} for system auditing.
  * </p>
  */
 @Service
@@ -72,6 +74,11 @@ public class TicketService {
     private final NotificationService notificationService;
 
     /**
+     * Service used to record ticket-related system activity.
+     */
+    private final SystemLogService systemLogService;
+
+    /**
      * Constructs a new {@code TicketService} with the required
      * repository and service dependencies.
      *
@@ -80,19 +87,22 @@ public class TicketService {
      * @param userRepository repository used to access user data
      * @param messageRepository repository used to access message data
      * @param notificationService service used to generate ticket notifications
+     * @param systemLogService service used to record ticket-related system events
      */
     public TicketService(
             TicketRepository ticketRepository,
             ConversationRepository conversationRepository,
             UserRepository userRepository,
             MessageRepository messageRepository,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            SystemLogService systemLogService) {
 
         this.ticketRepository = ticketRepository;
         this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.notificationService = notificationService;
+        this.systemLogService = systemLogService;
     }
 
     /**
@@ -152,7 +162,16 @@ public class TicketService {
         ticket.setPriority(request.getPriority());
         ticket.setStatus(TicketStatus.OPEN);
 
-        return ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        /*
+         * Record the successful creation of the support ticket
+         * after persistence so the generated ticket ID is available.
+         */
+        systemLogService.logTicketCreated(savedTicket);
+
+        return savedTicket;
     }
 
     /**
@@ -306,6 +325,7 @@ public class TicketService {
      * @return list containing all support tickets
      */
     public List<Ticket> getAllTickets() {
+
         return ticketRepository.findAll();
     }
 
@@ -329,9 +349,10 @@ public class TicketService {
     /**
      * Deletes a support ticket by its identifier.
      *
-     * @param ticketId identifier of the notification to delete
+     * @param ticketId identifier of the ticket to delete
      */
     public void deleteTicket(Long ticketId) {
+
         ticketRepository.deleteById(ticketId);
     }
 
@@ -372,13 +393,20 @@ public class TicketService {
                                         + ticketId));
 
         if (ticket.getStatus() != TicketStatus.OPEN) {
+
             throw new ForbiddenOperationException(
                     "Only open tickets can be escalated");
         }
 
         ticket.setStatus(TicketStatus.ESCALATED);
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
+
+        /*
+         * Record successful ticket escalation for system auditing.
+         */
+        systemLogService.logTicketEscalated(savedTicket);
 
         List<User> activeSupportAgents =
                 userRepository.findByRoleAndStatus(
@@ -449,6 +477,7 @@ public class TicketService {
                                         + normalizedEmail));
 
         if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+
             throw new ForbiddenOperationException(
                     "Only support agents can assign tickets");
         }
@@ -461,6 +490,7 @@ public class TicketService {
                                         + ticketId));
 
         if (ticket.getStatus() != TicketStatus.ESCALATED) {
+
             throw new ForbiddenOperationException(
                     "Only escalated tickets can be assigned");
         }
@@ -468,7 +498,8 @@ public class TicketService {
         ticket.setAssignedAgent(agent);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
 
         notificationService.createTicketNotification(
                 savedTicket.getCustomer(),
@@ -522,6 +553,7 @@ public class TicketService {
                                         + normalizedEmail));
 
         if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+
             throw new ForbiddenOperationException(
                     "Only support agents can update assigned tickets");
         }
@@ -572,7 +604,8 @@ public class TicketService {
                     request.getResolutionNotes().trim());
         }
 
-        Ticket savedTicket = ticketRepository.save(ticket);
+        Ticket savedTicket =
+                ticketRepository.save(ticket);
 
         /*
          * Determines the customer notification message based on the
@@ -654,6 +687,7 @@ public class TicketService {
                                         + normalizedEmail));
 
         if (agent.getRole() != UserRole.SUPPORT_AGENT) {
+
             throw new ForbiddenOperationException(
                     "Only support agents can send ticket responses");
         }
@@ -682,7 +716,8 @@ public class TicketService {
         message.setContent(request.getContent().trim());
         message.setSentimentScore(null);
 
-        Message savedMessage = messageRepository.save(message);
+        Message savedMessage =
+                messageRepository.save(message);
 
         /*
          * Notifies the customer that a support agent has sent

@@ -1,6 +1,7 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.service;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,13 +28,22 @@ import com.cqu.coit13230.AIBasedCustomerSupport.security.JwtService;
  * updating, deleting, registering, and authenticating users through
  * the {@link UserRepository}.
  * </p>
+ *
+ * <p>
+ * Authentication activity is recorded through the
+ * {@link SystemLogService} to support system auditing requirements.
+ * </p>
  */
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
+
     private final PasswordEncoder passwordEncoder;
+
     private final JwtService jwtService;
+
+    private final SystemLogService systemLogService;
 
     /**
      * Constructs a new {@code UserService} with the required dependencies.
@@ -41,15 +51,18 @@ public class UserService {
      * @param userRepository repository used to access user data
      * @param passwordEncoder encoder used to securely hash and verify passwords
      * @param jwtService service used to generate JWT authentication tokens
+     * @param systemLogService service used to record authentication events
      */
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            JwtService jwtService) {
+            JwtService jwtService,
+            SystemLogService systemLogService) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.systemLogService = systemLogService;
     }
 
     /**
@@ -68,9 +81,12 @@ public class UserService {
      */
     public User registerUser(RegisterRequest request) {
 
-        String email = request.getEmail().trim().toLowerCase();
+        String email = request.getEmail()
+                .trim()
+                .toLowerCase();
 
         if (userRepository.existsByEmail(email)) {
+
             throw new DuplicateResourceException(
                     "Email is already registered: " + email);
         }
@@ -78,10 +94,15 @@ public class UserService {
         User user = new User();
 
         user.setName(request.getName().trim());
+
         user.setEmail(email);
+
         user.setPasswordHash(
-                passwordEncoder.encode(request.getPassword()));
+                passwordEncoder.encode(
+                        request.getPassword()));
+
         user.setRole(UserRole.CUSTOMER);
+
         user.setStatus(UserStatus.ACTIVE);
 
         return userRepository.save(user);
@@ -102,6 +123,12 @@ public class UserService {
      * generated and returned to the client.
      * </p>
      *
+     * <p>
+     * Successful and unsuccessful authentication attempts are recorded
+     * in the system log. Passwords and JWT values are never written
+     * to the log.
+     * </p>
+     *
      * @param request login credentials supplied by the user
      * @return safe account information together with a JWT
      * @throws AuthenticationException if the credentials are invalid
@@ -109,22 +136,55 @@ public class UserService {
      */
     public LoginResponse authenticateUser(LoginRequest request) {
 
-        String email = request.getEmail().trim().toLowerCase();
+        String email = request.getEmail()
+                .trim()
+                .toLowerCase();
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() ->
-                        new AuthenticationException(
-                                "Invalid email or password"));
+        Optional<User> optionalUser =
+                userRepository.findByEmail(email);
 
-        if (!passwordEncoder.matches(
-                request.getPassword(),
-                user.getPasswordHash())) {
+        /*
+         * Record failed login when the supplied email address
+         * does not belong to an existing account.
+         */
+        if (optionalUser.isEmpty()) {
+
+            systemLogService.logLoginFailure(
+                    email,
+                    null);
 
             throw new AuthenticationException(
                     "Invalid email or password");
         }
 
+        User user = optionalUser.get();
+
+        /*
+         * Verify the supplied password against the BCrypt hash.
+         * The password itself is never stored in the system log.
+         */
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPasswordHash())) {
+
+            systemLogService.logLoginFailure(
+                    email,
+                    user);
+
+            throw new AuthenticationException(
+                    "Invalid email or password");
+        }
+
+        /*
+         * Inactive accounts are not permitted to authenticate.
+         * The unsuccessful attempt is recorded for auditing.
+         */
         if (user.getStatus() != UserStatus.ACTIVE) {
+
+            systemLogService.logLoginFailure(
+                    email,
+                    user);
+
             throw new AccountInactiveException(
                     "User account is inactive");
         }
@@ -132,6 +192,11 @@ public class UserService {
         String token = jwtService.generateToken(
                 user.getEmail(),
                 user.getRole().name());
+
+        /*
+         * Authentication has completed successfully.
+         */
+        systemLogService.logLoginSuccess(user);
 
         return new LoginResponse(
                 user.getUserId(),
@@ -150,6 +215,7 @@ public class UserService {
      * @return the saved user
      */
     public User saveUser(User user) {
+
         return userRepository.save(user);
     }
 
@@ -159,6 +225,7 @@ public class UserService {
      * @return a list of all users
      */
     public List<User> getAllUsers() {
+
         return userRepository.findAll();
     }
 
@@ -174,7 +241,8 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
-                                "User not found with ID: " + userId));
+                                "User not found with ID: "
+                                        + userId));
     }
 
     /**
@@ -186,8 +254,10 @@ public class UserService {
     public void deleteUser(Long userId) {
 
         if (!userRepository.existsById(userId)) {
+
             throw new ResourceNotFoundException(
-                    "User not found with ID: " + userId);
+                    "User not found with ID: "
+                            + userId);
         }
 
         userRepository.deleteById(userId);
@@ -214,6 +284,7 @@ public class UserService {
         User user = getUserById(userId);
 
         user.setRole(request.getRole());
+
         user.setStatus(request.getStatus());
 
         return userRepository.save(user);
