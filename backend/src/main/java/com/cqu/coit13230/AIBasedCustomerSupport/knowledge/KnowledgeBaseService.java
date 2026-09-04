@@ -1,82 +1,49 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.knowledge;
 
-import com.cqu.coit13230.AIBasedCustomerSupport.ai.OpenAiEmbeddingGateway;
 import com.cqu.coit13230.AIBasedCustomerSupport.common.NotFoundException;
-import com.cqu.coit13230.AIBasedCustomerSupport.common.OpenAiServiceException;
-
-import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
-import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
-
-import org.springframework.beans.factory.annotation.Value;
+import com.cqu.coit13230.AIBasedCustomerSupport.user.User;
+import com.cqu.coit13230.AIBasedCustomerSupport.user.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class KnowledgeBaseService {
     private final KnowledgeBaseRepository entries;
     private final UserService users;
-    private final OpenAiEmbeddingGateway embeddings;
-    private final double matchThreshold;
 
-    public KnowledgeBaseService(
-            KnowledgeBaseRepository entries,
-            UserService users,
-            OpenAiEmbeddingGateway embeddings,
-            @Value("${app.ai.openai.knowledge-match-threshold:0.55}") double matchThreshold
-    ) {
+    public KnowledgeBaseService(KnowledgeBaseRepository entries, UserService users) {
         this.entries = entries;
         this.users = users;
-        this.embeddings = embeddings;
-        this.matchThreshold = matchThreshold;
     }
 
     @Transactional(readOnly = true)
     public List<KnowledgeBaseView> list() {
         return entries.findAllByOrderByCategoryAscQuestionPatternAsc().stream()
-                .map(KnowledgeBaseView::from)
-                .toList();
+                .map(KnowledgeBaseView::from).toList();
     }
 
     @Transactional(readOnly = true)
     public Optional<KnowledgeMatch> findBestMatch(String message) {
-        if (message == null || message.isBlank()) {
-            return Optional.empty();
-        }
+        Set<String> words = words(message);
+        if (words.isEmpty()) return Optional.empty();
 
-        List<KnowledgeBaseEntry> activeEntries =
-                entries.findByActiveTrueOrderByCategoryAscQuestionPatternAsc();
-        if (activeEntries.isEmpty()) {
-            return Optional.empty();
-        }
-
-        List<String> embeddingInputs = new ArrayList<>(activeEntries.size() + 1);
-        embeddingInputs.add(message.trim());
-        activeEntries.stream()
-                .map(this::embeddingText)
-                .forEach(embeddingInputs::add);
-
-        List<List<Double>> vectors = embeddings.embed(embeddingInputs);
-        if (vectors.size() != embeddingInputs.size()) {
-            throw new OpenAiServiceException("OpenAI embedding result count did not match the knowledge-base request");
-        }
-
-        List<Double> queryVector = vectors.getFirst();
         KnowledgeMatch best = null;
-        for (int index = 0; index < activeEntries.size(); index++) {
-            double score = cosineSimilarity(queryVector, vectors.get(index + 1));
-            KnowledgeMatch candidate = new KnowledgeMatch(activeEntries.get(index), score);
-            if (best == null || candidate.score() > best.score()) {
-                best = candidate;
+        for (KnowledgeBaseEntry entry : entries.findByActiveTrueOrderByCategoryAscQuestionPatternAsc()) {
+            Set<String> patternWords = words(entry.getQuestionPattern());
+            if (patternWords.isEmpty()) continue;
+            long overlap = patternWords.stream().filter(words::contains).count();
+            double score = overlap / (double) patternWords.size();
+            String lower = message.toLowerCase(Locale.ROOT);
+            for (String alternative : entry.getQuestionPattern().toLowerCase(Locale.ROOT).split("[,;|]")) {
+                String trimmed = alternative.trim();
+                if (trimmed.length() > 3 && lower.contains(trimmed)) score = Math.max(score, 0.95);
             }
+            if (best == null || score > best.score()) best = new KnowledgeMatch(entry, score);
         }
-
-        return best != null && best.score() >= matchThreshold
-                ? Optional.of(best)
-                : Optional.empty();
+        return best != null && best.score() >= 0.34 ? Optional.of(best) : Optional.empty();
     }
 
     @Transactional
@@ -98,9 +65,7 @@ public class KnowledgeBaseService {
 
     @Transactional
     public void delete(Long id) {
-        if (!entries.existsById(id)) {
-            throw new NotFoundException("Knowledge base entry not found");
-        }
+        if (!entries.existsById(id)) throw new NotFoundException("Knowledge base entry not found");
         entries.deleteById(id);
     }
 
@@ -112,29 +77,11 @@ public class KnowledgeBaseService {
         entry.setLastUpdatedBy(user);
     }
 
-    private String embeddingText(KnowledgeBaseEntry entry) {
-        return "Question patterns: " + entry.getQuestionPattern()
-                + "\nApproved answer: " + entry.getAnswerTemplate()
-                + "\nCategory: " + entry.getCategory();
-    }
-
-    private double cosineSimilarity(List<Double> first, List<Double> second) {
-        if (first == null || second == null || first.isEmpty() || first.size() != second.size()) {
-            throw new OpenAiServiceException("OpenAI returned incompatible embedding vectors");
-        }
-
-        double dot = 0;
-        double firstMagnitude = 0;
-        double secondMagnitude = 0;
-        for (int i = 0; i < first.size(); i++) {
-            double a = first.get(i);
-            double b = second.get(i);
-            dot += a * b;
-            firstMagnitude += a * a;
-            secondMagnitude += b * b;
-        }
-
-        double denominator = Math.sqrt(firstMagnitude) * Math.sqrt(secondMagnitude);
-        return denominator == 0 ? 0 : dot / denominator;
+    private Set<String> words(String text) {
+        if (text == null) return Set.of();
+        return Arrays.stream(text.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9 ]", " ").split("\\s+"))
+                .filter(word -> word.length() > 2)
+                .filter(word -> !Set.of("the", "and", "for", "with", "that", "this", "you", "your", "can", "how", "what").contains(word))
+                .collect(Collectors.toSet());
     }
 }
