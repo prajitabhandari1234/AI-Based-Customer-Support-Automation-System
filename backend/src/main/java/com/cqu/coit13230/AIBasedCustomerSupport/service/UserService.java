@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AdminUserCreateRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AdminUserUpdateRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginResponse;
@@ -262,6 +263,58 @@ public class UserService {
 
         userRepository.deleteById(userId);
     }
+
+    /**
+     * Creates a new user account through the administrator
+     * user-management workflow.
+     * 
+     * <p>
+     * The email address is normalised before duplicate checking.
+     * The supplied password is securely hashed using the configured
+     * password encoder before the account is persisted.
+     * </p>
+     * 
+     * <p>
+     * Unlike public customer registration, administrators may assign
+     * CUSTOMER, SUPPORT_AGENT, or ADMIN roles and select the initial
+     * account status.
+     * </p>
+     * 
+     * @param request user account information supplied by an administrator
+     * @return newly created user account
+     * @throws DuplicateResourceException if the email address is already registered
+     * */
+    public User createUserByAdmin(
+        AdminUserCreateRequest request) {
+                String email = request.getEmail()
+                .trim()
+                .toLowerCase();
+
+        if (userRepository.existsByEmail(email)) {
+
+                throw new DuplicateResourceException(
+                        "Email is already registered: " + email);
+        }
+
+        User user = new User();
+
+        user.setName(
+                request.getName().trim());
+
+        user.setEmail(email);
+
+        user.setPasswordHash(
+                passwordEncoder.encode(
+                        request.getPassword()));
+
+        user.setRole(
+                request.getRole());
+
+        user.setStatus(
+                request.getStatus());
+
+        return userRepository.save(user);
+        }
 
     /**
      * Updates the role and account status of an existing user.
