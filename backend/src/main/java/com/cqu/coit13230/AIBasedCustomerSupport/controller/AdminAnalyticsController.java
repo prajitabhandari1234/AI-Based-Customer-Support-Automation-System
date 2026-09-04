@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsReportResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsSummaryResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketCategory;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketPriority;
@@ -18,8 +19,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.service.AnalyticsService;
  * REST controller for administrator analytics operations.
  *
  * <p>
- * Provides aggregated support-ticket statistics for use by
- * the administrator dashboard.
+ * Provides aggregated support-ticket statistics and periodic
+ * reports for use by the administrator dashboard.
  * </p>
  *
  * <p>
@@ -38,7 +39,9 @@ public class AdminAnalyticsController {
      *
      * @param analyticsService service used to generate analytics data
      */
-    public AdminAnalyticsController(AnalyticsService analyticsService) {
+    public AdminAnalyticsController(
+            AnalyticsService analyticsService) {
+
         this.analyticsService = analyticsService;
     }
 
@@ -48,7 +51,8 @@ public class AdminAnalyticsController {
      * @return response containing aggregated ticket analytics
      */
     @GetMapping("/tickets")
-    public ResponseEntity<AnalyticsSummaryResponse> getTicketSummary() {
+    public ResponseEntity<AnalyticsSummaryResponse>
+            getTicketSummary() {
 
         AnalyticsSummaryResponse summary =
                 analyticsService.getTicketSummary();
@@ -74,14 +78,28 @@ public class AdminAnalyticsController {
      * @return analytics summary matching the supplied filters
      */
     @GetMapping("/tickets/filter")
-    public ResponseEntity<AnalyticsSummaryResponse> getFilteredTicketSummary(
-            @RequestParam(required = false) LocalDate startDate,
-            @RequestParam(required = false) LocalDate endDate,
-            @RequestParam(required = false) TicketCategory category,
-            @RequestParam(required = false) TicketPriority priority,
-            @RequestParam(required = false) TicketStatus status,
-            @RequestParam(required = false) Double minSentiment,
-            @RequestParam(required = false) Double maxSentiment) {
+    public ResponseEntity<AnalyticsSummaryResponse>
+            getFilteredTicketSummary(
+                    @RequestParam(required = false)
+                    LocalDate startDate,
+
+                    @RequestParam(required = false)
+                    LocalDate endDate,
+
+                    @RequestParam(required = false)
+                    TicketCategory category,
+
+                    @RequestParam(required = false)
+                    TicketPriority priority,
+
+                    @RequestParam(required = false)
+                    TicketStatus status,
+
+                    @RequestParam(required = false)
+                    Double minSentiment,
+
+                    @RequestParam(required = false)
+                    Double maxSentiment) {
 
         AnalyticsSummaryResponse summary =
                 analyticsService.getFilteredTicketSummary(
@@ -94,5 +112,49 @@ public class AdminAnalyticsController {
                         maxSentiment);
 
         return ResponseEntity.ok(summary);
+    }
+
+    /**
+     * Generates a weekly support-ticket analytics report.
+     *
+     * <p>
+     * The reporting week begins on Monday and ends on Sunday.
+     * The supplied date determines which week is reported.
+     * </p>
+     *
+     * @param date reference date for the reporting week
+     * @return weekly analytics report
+     */
+    @GetMapping("/reports/weekly")
+    public ResponseEntity<AnalyticsReportResponse>
+            getWeeklyReport(
+                    @RequestParam LocalDate date) {
+
+        AnalyticsReportResponse report =
+                analyticsService.getWeeklyReport(date);
+
+        return ResponseEntity.ok(report);
+    }
+
+    /**
+     * Generates a monthly support-ticket analytics report.
+     *
+     * <p>
+     * The supplied date determines which calendar month
+     * is included in the report.
+     * </p>
+     *
+     * @param date reference date for the reporting month
+     * @return monthly analytics report
+     */
+    @GetMapping("/reports/monthly")
+    public ResponseEntity<AnalyticsReportResponse>
+            getMonthlyReport(
+                    @RequestParam LocalDate date) {
+
+        AnalyticsReportResponse report =
+                analyticsService.getMonthlyReport(date);
+
+        return ResponseEntity.ok(report);
     }
 }

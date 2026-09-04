@@ -1,7 +1,9 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +11,7 @@ import java.util.Map;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsReportResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsSummaryResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketCategory;
@@ -27,8 +30,9 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
  * </p>
  *
  * <p>
- * The service also supports dynamic analytics filtering by date range,
- * category, priority, status, and sentiment score.
+ * The service supports dynamic analytics filtering by date range,
+ * category, priority, status, and sentiment score. It also generates
+ * weekly and monthly summary reports for administrator reporting.
  * </p>
  */
 @Service
@@ -57,7 +61,8 @@ public class AnalyticsService {
 
         response.setTotalTickets(ticketRepository.count());
 
-        Map<String, Long> statusCounts = new LinkedHashMap<>();
+        Map<String, Long> statusCounts =
+                new LinkedHashMap<>();
 
         for (TicketStatus status : TicketStatus.values()) {
             statusCounts.put(
@@ -67,7 +72,8 @@ public class AnalyticsService {
 
         response.setByStatus(statusCounts);
 
-        Map<String, Long> priorityCounts = new LinkedHashMap<>();
+        Map<String, Long> priorityCounts =
+                new LinkedHashMap<>();
 
         for (TicketPriority priority : TicketPriority.values()) {
             priorityCounts.put(
@@ -77,7 +83,8 @@ public class AnalyticsService {
 
         response.setByPriority(priorityCounts);
 
-        Map<String, Long> categoryCounts = new LinkedHashMap<>();
+        Map<String, Long> categoryCounts =
+                new LinkedHashMap<>();
 
         for (TicketCategory category : TicketCategory.values()) {
             categoryCounts.put(
@@ -158,6 +165,7 @@ public class AnalyticsService {
         }
 
         if (category != null) {
+
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.equal(
@@ -166,6 +174,7 @@ public class AnalyticsService {
         }
 
         if (priority != null) {
+
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.equal(
@@ -174,6 +183,7 @@ public class AnalyticsService {
         }
 
         if (status != null) {
+
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.equal(
@@ -182,6 +192,7 @@ public class AnalyticsService {
         }
 
         if (minSentiment != null) {
+
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.greaterThanOrEqualTo(
@@ -190,6 +201,7 @@ public class AnalyticsService {
         }
 
         if (maxSentiment != null) {
+
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.lessThanOrEqualTo(
@@ -201,6 +213,123 @@ public class AnalyticsService {
                 ticketRepository.findAll(specification);
 
         return buildAnalyticsSummary(tickets);
+    }
+
+    /**
+     * Generates a weekly analytics report for the week containing
+     * the specified reference date.
+     *
+     * <p>
+     * The reporting week begins on Monday and ends on Sunday.
+     * </p>
+     *
+     * @param date reference date used to determine the reporting week
+     * @return weekly ticket analytics report
+     * @throws IllegalArgumentException if the reference date is missing
+     */
+    public AnalyticsReportResponse getWeeklyReport(
+            LocalDate date) {
+
+        if (date == null) {
+            throw new IllegalArgumentException(
+                    "Reference date is required");
+        }
+
+        LocalDate startDate =
+                date.with(
+                        TemporalAdjusters.previousOrSame(
+                                DayOfWeek.MONDAY));
+
+        LocalDate endDate =
+                date.with(
+                        TemporalAdjusters.nextOrSame(
+                                DayOfWeek.SUNDAY));
+
+        return buildAnalyticsReport(
+                "WEEKLY",
+                startDate,
+                endDate);
+    }
+
+    /**
+     * Generates a monthly analytics report for the month containing
+     * the specified reference date.
+     *
+     * <p>
+     * The reporting period begins on the first day of the month
+     * and ends on the final day of the same month.
+     * </p>
+     *
+     * @param date reference date used to determine the reporting month
+     * @return monthly ticket analytics report
+     * @throws IllegalArgumentException if the reference date is missing
+     */
+    public AnalyticsReportResponse getMonthlyReport(
+            LocalDate date) {
+
+        if (date == null) {
+            throw new IllegalArgumentException(
+                    "Reference date is required");
+        }
+
+        LocalDate startDate =
+                date.withDayOfMonth(1);
+
+        LocalDate endDate =
+                date.withDayOfMonth(
+                        date.lengthOfMonth());
+
+        return buildAnalyticsReport(
+                "MONTHLY",
+                startDate,
+                endDate);
+    }
+
+    /**
+     * Builds a periodic analytics report for the specified date range.
+     *
+     * @param reportType type of report being generated
+     * @param startDate beginning of the reporting period
+     * @param endDate end of the reporting period
+     * @return completed analytics report
+     */
+    private AnalyticsReportResponse buildAnalyticsReport(
+            String reportType,
+            LocalDate startDate,
+            LocalDate endDate) {
+
+        LocalDateTime startDateTime =
+                startDate.atStartOfDay();
+
+        LocalDateTime endDateTime =
+                endDate.plusDays(1).atStartOfDay();
+
+        Specification<Ticket> specification =
+                (root, query, criteriaBuilder) ->
+                        criteriaBuilder.and(
+                                criteriaBuilder.greaterThanOrEqualTo(
+                                        root.get("createdAt"),
+                                        startDateTime),
+                                criteriaBuilder.lessThan(
+                                        root.get("createdAt"),
+                                        endDateTime));
+
+        List<Ticket> tickets =
+                ticketRepository.findAll(specification);
+
+        AnalyticsSummaryResponse summary =
+                buildAnalyticsSummary(tickets);
+
+        AnalyticsReportResponse report =
+                new AnalyticsReportResponse();
+
+        report.setReportType(reportType);
+        report.setStartDate(startDate);
+        report.setEndDate(endDate);
+        report.setGeneratedAt(LocalDateTime.now());
+        report.setSummary(summary);
+
+        return report;
     }
 
     /**
@@ -226,14 +355,16 @@ public class AnalyticsService {
         }
 
         if (minSentiment != null
-                && (minSentiment < -1.0 || minSentiment > 1.0)) {
+                && (minSentiment < -1.0
+                || minSentiment > 1.0)) {
 
             throw new IllegalArgumentException(
                     "Minimum sentiment score must be between -1.0 and 1.0");
         }
 
         if (maxSentiment != null
-                && (maxSentiment < -1.0 || maxSentiment > 1.0)) {
+                && (maxSentiment < -1.0
+                || maxSentiment > 1.0)) {
 
             throw new IllegalArgumentException(
                     "Maximum sentiment score must be between -1.0 and 1.0");
