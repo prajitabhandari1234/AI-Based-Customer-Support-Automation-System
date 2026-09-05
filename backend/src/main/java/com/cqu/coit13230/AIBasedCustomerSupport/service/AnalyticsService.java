@@ -14,10 +14,14 @@ import org.springframework.stereotype.Service;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsReportResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AnalyticsSummaryResponse;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.SenderType;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketCategory;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketPriority;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
+import com.cqu.coit13230.AIBasedCustomerSupport.repository.MessageRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
 
 /**
@@ -26,8 +30,9 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
  *
  * <p>
  * Provides aggregated ticket statistics used by the administrator
- * dashboard, including ticket totals and distributions by status,
- * priority, category, escalation rate, and average resolution time.
+ * dashboard, including ticket totals, customer enquiry count,
+ * distributions by status, priority and category, escalation rate,
+ * average response time, and average resolution time.
  * </p>
  *
  * <p>
@@ -40,27 +45,24 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
 public class AnalyticsService {
 
     private final TicketRepository ticketRepository;
+    private final MessageRepository messageRepository;
 
     /**
      * Constructs the analytics service.
      *
      * @param ticketRepository repository used to access ticket data
+     * @param messageRepository repository used to access message data
      */
     public AnalyticsService(
-            TicketRepository ticketRepository) {
+            TicketRepository ticketRepository,
+            MessageRepository messageRepository) {
 
         this.ticketRepository = ticketRepository;
+        this.messageRepository = messageRepository;
     }
 
     /**
      * Generates a summary of current support ticket statistics.
-     *
-     * <p>
-     * Historical escalation information is determined using
-     * the escalatedAt timestamp rather than the current ticket status.
-     * Average resolution time is calculated using createdAt and
-     * resolvedAt timestamps.
-     * </p>
      *
      * @return aggregated ticket analytics
      */
@@ -194,7 +196,6 @@ public class AnalyticsService {
      *
      * @param date reference date used to determine the reporting week
      * @return weekly ticket analytics report
-     * @throws IllegalArgumentException if the reference date is missing
      */
     public AnalyticsReportResponse getWeeklyReport(
             LocalDate date) {
@@ -224,14 +225,8 @@ public class AnalyticsService {
      * Generates a monthly analytics report for the month containing
      * the specified reference date.
      *
-     * <p>
-     * The reporting period begins on the first day of the month
-     * and ends on the final day of the same month.
-     * </p>
-     *
      * @param date reference date used to determine the reporting month
      * @return monthly ticket analytics report
-     * @throws IllegalArgumentException if the reference date is missing
      */
     public AnalyticsReportResponse getMonthlyReport(
             LocalDate date) {
@@ -352,9 +347,10 @@ public class AnalyticsService {
      * Builds an analytics summary from the supplied list of tickets.
      *
      * <p>
-     * Historical escalation is determined using escalatedAt rather
-     * than the current status. Average resolution time is calculated
-     * only for tickets containing both createdAt and resolvedAt.
+     * Customer enquiry count is calculated using CUSTOMER messages.
+     * Historical escalation is determined using escalatedAt.
+     * Average response time uses the first SUPPORT_AGENT message.
+     * Average resolution time uses createdAt and resolvedAt.
      * </p>
      *
      * @param tickets tickets included in the analytics calculation
@@ -373,7 +369,8 @@ public class AnalyticsService {
         Map<String, Long> statusCounts =
                 new LinkedHashMap<>();
 
-        for (TicketStatus status : TicketStatus.values()) {
+        for (TicketStatus status :
+                TicketStatus.values()) {
 
             long count = tickets.stream()
                     .filter(ticket ->
@@ -395,8 +392,7 @@ public class AnalyticsService {
 
             long count = tickets.stream()
                     .filter(ticket ->
-                            ticket.getPriority()
-                                    == priority)
+                            ticket.getPriority() == priority)
                     .count();
 
             priorityCounts.put(
@@ -414,8 +410,7 @@ public class AnalyticsService {
 
             long count = tickets.stream()
                     .filter(ticket ->
-                            ticket.getCategory()
-                                    == category)
+                            ticket.getCategory() == category)
                     .count();
 
             categoryCounts.put(
@@ -426,11 +421,7 @@ public class AnalyticsService {
         response.setByCategory(categoryCounts);
 
         /*
-         * Count tickets that have ever been escalated.
-         *
-         * The current ticket status must not be used because an
-         * escalated ticket may later become IN_PROGRESS, RESOLVED,
-         * or CLOSED.
+         * Count tickets that have historically been escalated.
          */
         long escalatedTickets = tickets.stream()
                 .filter(ticket ->
@@ -441,9 +432,7 @@ public class AnalyticsService {
                 escalatedTickets);
 
         /*
-         * Calculate escalation rate as:
-         *
-         * historically escalated tickets / total tickets * 100
+         * Calculate escalation rate.
          */
         double escalationRatePercent = 0.0;
 
@@ -459,8 +448,7 @@ public class AnalyticsService {
                         escalationRatePercent));
 
         /*
-         * Maintain the existing resolved ticket count based on the
-         * current RESOLVED lifecycle status.
+         * Count tickets currently in RESOLVED status.
          */
         long resolvedTickets = tickets.stream()
                 .filter(ticket ->
@@ -472,11 +460,121 @@ public class AnalyticsService {
                 resolvedTickets);
 
         /*
-         * Calculate average resolution time using timestamps.
+         * Calculate:
          *
-         * Older tickets that existed before resolvedAt was introduced
-         * are excluded because their historical resolution timestamp
-         * is unknown.
+         * 1. Customer enquiry count
+         * 2. Average first support-agent response time
+         *
+         * Messages are loaded once per conversation and reused
+         * for both calculations.
+         */
+        long enquiryCount = 0;
+        double totalResponseMilliseconds = 0.0;
+        long ticketsWithAgentResponse = 0;
+
+        for (Ticket ticket : tickets) {
+
+            if (ticket.getConversation() == null
+                    || ticket.getConversation()
+                            .getConversationId() == null) {
+
+                continue;
+            }
+
+            Long conversationId =
+                    ticket.getConversation()
+                            .getConversationId();
+
+            List<Message> messages =
+                    messageRepository
+                            .findByConversationConversationIdOrderByCreatedAtAsc(
+                                    conversationId);
+
+            /*
+             * Each CUSTOMER message is counted as one enquiry.
+             */
+            enquiryCount += messages.stream()
+                    .filter(message ->
+                            message.getSenderType()
+                                    == SenderType.CUSTOMER)
+                    .count();
+
+            /*
+             * Response-time calculation requires a ticket
+             * creation timestamp.
+             */
+            if (ticket.getCreatedAt() == null) {
+                continue;
+            }
+
+            /*
+             * Because the repository returns messages ordered
+             * by createdAt ascending, findFirst() gives the
+             * earliest valid support-agent message.
+             */
+            Message firstAgentMessage =
+                    messages.stream()
+                            .filter(message ->
+                                    message.getSenderType()
+                                            == SenderType.SUPPORT_AGENT)
+                            .filter(message ->
+                                    message.getSenderUser() != null)
+                            .filter(message ->
+                                    message.getSenderUser()
+                                            .getRole()
+                                            == UserRole.SUPPORT_AGENT)
+                            .filter(message ->
+                                    message.getCreatedAt() != null)
+                            .filter(message ->
+                                    !message.getCreatedAt()
+                                            .isBefore(
+                                                    ticket.getCreatedAt()))
+                            .findFirst()
+                            .orElse(null);
+
+            if (firstAgentMessage != null) {
+
+                long responseMilliseconds =
+                        Duration.between(
+                                ticket.getCreatedAt(),
+                                firstAgentMessage.getCreatedAt())
+                                .toMillis();
+
+                totalResponseMilliseconds +=
+                        responseMilliseconds;
+
+                ticketsWithAgentResponse++;
+            }
+        }
+
+        response.setEnquiryCount(
+                enquiryCount);
+
+        /*
+         * Calculate average agent response time.
+         */
+        if (ticketsWithAgentResponse == 0) {
+
+            response.setAverageResponseTimeHours(
+                    null);
+
+        } else {
+
+            double averageResponseMilliseconds =
+                    totalResponseMilliseconds
+                            / ticketsWithAgentResponse;
+
+            double averageResponseTimeHours =
+                    averageResponseMilliseconds
+                            / (1000.0 * 60.0 * 60.0);
+
+            response.setAverageResponseTimeHours(
+                    roundToTwoDecimalPlaces(
+                            averageResponseTimeHours));
+        }
+
+        /*
+         * Calculate average resolution time.
          */
         List<Ticket> ticketsWithResolutionTime =
                 tickets.stream()

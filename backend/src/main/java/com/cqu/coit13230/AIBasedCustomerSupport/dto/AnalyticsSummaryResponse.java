@@ -7,9 +7,9 @@ import java.util.Map;
  *
  * <p>
  * This DTO is used by the administrator analytics API to provide
- * aggregated ticket information such as totals, status distribution,
- * priority distribution, category distribution, escalation rate,
- * and average resolution time.
+ * aggregated ticket information such as totals, enquiry count,
+ * status distribution, priority distribution, category distribution,
+ * escalation rate, average response time, and average resolution time.
  * </p>
  */
 public class AnalyticsSummaryResponse {
@@ -18,6 +18,16 @@ public class AnalyticsSummaryResponse {
      * Total number of support tickets.
      */
     private long totalTickets;
+
+    /**
+     * Total number of customer enquiries.
+     *
+     * <p>
+     * Each message sent with the CUSTOMER sender type is treated
+     * as a customer enquiry.
+     * </p>
+     */
+    private long enquiryCount;
 
     /**
      * Number of tickets grouped by lifecycle status.
@@ -56,12 +66,22 @@ public class AnalyticsSummaryResponse {
     private double escalationRatePercent;
 
     /**
+     * Average time, in hours, between ticket creation and the
+     * first response from a support agent.
+     *
+     * <p>
+     * Tickets without a support-agent response are excluded.
+     * AI-generated responses are not treated as human support responses.
+     * </p>
+     */
+    private Double averageResponseTimeHours;
+
+    /**
      * Average time, in hours, between ticket creation and resolution.
      *
      * <p>
      * Only tickets containing a resolvedAt timestamp are included
-     * in this calculation. The value is null when no resolved ticket
-     * timestamps are available.
+     * in this calculation.
      * </p>
      */
     private Double averageResolutionTimeHours;
@@ -82,6 +102,24 @@ public class AnalyticsSummaryResponse {
      */
     public void setTotalTickets(long totalTickets) {
         this.totalTickets = totalTickets;
+    }
+
+    /**
+     * Returns the total number of customer enquiries.
+     *
+     * @return customer enquiry count
+     */
+    public long getEnquiryCount() {
+        return enquiryCount;
+    }
+
+    /**
+     * Sets the total number of customer enquiries.
+     *
+     * @param enquiryCount customer enquiry count
+     */
+    public void setEnquiryCount(long enquiryCount) {
+        this.enquiryCount = enquiryCount;
     }
 
     /**
@@ -197,6 +235,28 @@ public class AnalyticsSummaryResponse {
 
         this.escalationRatePercent =
                 escalationRatePercent;
+    }
+
+    /**
+     * Returns the average support-agent response time in hours.
+     *
+     * @return average response time in hours, or null when
+     *         no support-agent responses are available
+     */
+    public Double getAverageResponseTimeHours() {
+        return averageResponseTimeHours;
+    }
+
+    /**
+     * Sets the average support-agent response time in hours.
+     *
+     * @param averageResponseTimeHours average response time in hours
+     */
+    public void setAverageResponseTimeHours(
+            Double averageResponseTimeHours) {
+
+        this.averageResponseTimeHours =
+                averageResponseTimeHours;
     }
 
     /**
