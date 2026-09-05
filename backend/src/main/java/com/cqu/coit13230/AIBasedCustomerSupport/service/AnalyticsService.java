@@ -1,6 +1,7 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.service;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
@@ -26,7 +27,7 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
  * <p>
  * Provides aggregated ticket statistics used by the administrator
  * dashboard, including ticket totals and distributions by status,
- * priority, and category.
+ * priority, category, escalation rate, and average resolution time.
  * </p>
  *
  * <p>
@@ -45,64 +46,30 @@ public class AnalyticsService {
      *
      * @param ticketRepository repository used to access ticket data
      */
-    public AnalyticsService(TicketRepository ticketRepository) {
+    public AnalyticsService(
+            TicketRepository ticketRepository) {
+
         this.ticketRepository = ticketRepository;
     }
 
     /**
      * Generates a summary of current support ticket statistics.
      *
+     * <p>
+     * Historical escalation information is determined using
+     * the escalatedAt timestamp rather than the current ticket status.
+     * Average resolution time is calculated using createdAt and
+     * resolvedAt timestamps.
+     * </p>
+     *
      * @return aggregated ticket analytics
      */
     public AnalyticsSummaryResponse getTicketSummary() {
 
-        AnalyticsSummaryResponse response =
-                new AnalyticsSummaryResponse();
+        List<Ticket> tickets =
+                ticketRepository.findAll();
 
-        response.setTotalTickets(ticketRepository.count());
-
-        Map<String, Long> statusCounts =
-                new LinkedHashMap<>();
-
-        for (TicketStatus status : TicketStatus.values()) {
-            statusCounts.put(
-                    status.name(),
-                    ticketRepository.countByStatus(status));
-        }
-
-        response.setByStatus(statusCounts);
-
-        Map<String, Long> priorityCounts =
-                new LinkedHashMap<>();
-
-        for (TicketPriority priority : TicketPriority.values()) {
-            priorityCounts.put(
-                    priority.name(),
-                    ticketRepository.countByPriority(priority));
-        }
-
-        response.setByPriority(priorityCounts);
-
-        Map<String, Long> categoryCounts =
-                new LinkedHashMap<>();
-
-        for (TicketCategory category : TicketCategory.values()) {
-            categoryCounts.put(
-                    category.name(),
-                    ticketRepository.countByCategory(category));
-        }
-
-        response.setByCategory(categoryCounts);
-
-        response.setEscalatedTickets(
-                ticketRepository.countByStatus(
-                        TicketStatus.ESCALATED));
-
-        response.setResolvedTickets(
-                ticketRepository.countByStatus(
-                        TicketStatus.RESOLVED));
-
-        return response;
+        return buildAnalyticsSummary(tickets);
     }
 
     /**
@@ -196,7 +163,8 @@ public class AnalyticsService {
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.greaterThanOrEqualTo(
-                                    root.<Double>get("sentimentScore"),
+                                    root.<Double>get(
+                                            "sentimentScore"),
                                     minSentiment));
         }
 
@@ -205,7 +173,8 @@ public class AnalyticsService {
             specification = specification.and(
                     (root, query, criteriaBuilder) ->
                             criteriaBuilder.lessThanOrEqualTo(
-                                    root.<Double>get("sentimentScore"),
+                                    root.<Double>get(
+                                            "sentimentScore"),
                                     maxSentiment));
         }
 
@@ -382,6 +351,12 @@ public class AnalyticsService {
     /**
      * Builds an analytics summary from the supplied list of tickets.
      *
+     * <p>
+     * Historical escalation is determined using escalatedAt rather
+     * than the current status. Average resolution time is calculated
+     * only for tickets containing both createdAt and resolvedAt.
+     * </p>
+     *
      * @param tickets tickets included in the analytics calculation
      * @return aggregated analytics summary
      */
@@ -391,7 +366,9 @@ public class AnalyticsService {
         AnalyticsSummaryResponse response =
                 new AnalyticsSummaryResponse();
 
-        response.setTotalTickets(tickets.size());
+        long totalTickets = tickets.size();
+
+        response.setTotalTickets(totalTickets);
 
         Map<String, Long> statusCounts =
                 new LinkedHashMap<>();
@@ -413,11 +390,13 @@ public class AnalyticsService {
         Map<String, Long> priorityCounts =
                 new LinkedHashMap<>();
 
-        for (TicketPriority priority : TicketPriority.values()) {
+        for (TicketPriority priority :
+                TicketPriority.values()) {
 
             long count = tickets.stream()
                     .filter(ticket ->
-                            ticket.getPriority() == priority)
+                            ticket.getPriority()
+                                    == priority)
                     .count();
 
             priorityCounts.put(
@@ -430,11 +409,13 @@ public class AnalyticsService {
         Map<String, Long> categoryCounts =
                 new LinkedHashMap<>();
 
-        for (TicketCategory category : TicketCategory.values()) {
+        for (TicketCategory category :
+                TicketCategory.values()) {
 
             long count = tickets.stream()
                     .filter(ticket ->
-                            ticket.getCategory() == category)
+                            ticket.getCategory()
+                                    == category)
                     .count();
 
             categoryCounts.put(
@@ -444,15 +425,43 @@ public class AnalyticsService {
 
         response.setByCategory(categoryCounts);
 
+        /*
+         * Count tickets that have ever been escalated.
+         *
+         * The current ticket status must not be used because an
+         * escalated ticket may later become IN_PROGRESS, RESOLVED,
+         * or CLOSED.
+         */
         long escalatedTickets = tickets.stream()
                 .filter(ticket ->
-                        ticket.getStatus()
-                                == TicketStatus.ESCALATED)
+                        ticket.getEscalatedAt() != null)
                 .count();
 
         response.setEscalatedTickets(
                 escalatedTickets);
 
+        /*
+         * Calculate escalation rate as:
+         *
+         * historically escalated tickets / total tickets * 100
+         */
+        double escalationRatePercent = 0.0;
+
+        if (totalTickets > 0) {
+
+            escalationRatePercent =
+                    ((double) escalatedTickets
+                            / totalTickets) * 100.0;
+        }
+
+        response.setEscalationRatePercent(
+                roundToTwoDecimalPlaces(
+                        escalationRatePercent));
+
+        /*
+         * Maintain the existing resolved ticket count based on the
+         * current RESOLVED lifecycle status.
+         */
         long resolvedTickets = tickets.stream()
                 .filter(ticket ->
                         ticket.getStatus()
@@ -462,6 +471,62 @@ public class AnalyticsService {
         response.setResolvedTickets(
                 resolvedTickets);
 
+        /*
+         * Calculate average resolution time using timestamps.
+         *
+         * Older tickets that existed before resolvedAt was introduced
+         * are excluded because their historical resolution timestamp
+         * is unknown.
+         */
+        List<Ticket> ticketsWithResolutionTime =
+                tickets.stream()
+                        .filter(ticket ->
+                                ticket.getCreatedAt() != null)
+                        .filter(ticket ->
+                                ticket.getResolvedAt() != null)
+                        .toList();
+
+        if (ticketsWithResolutionTime.isEmpty()) {
+
+            response.setAverageResolutionTimeHours(
+                    null);
+
+        } else {
+
+            double totalResolutionMilliseconds =
+                    ticketsWithResolutionTime.stream()
+                            .mapToDouble(ticket ->
+                                    Duration.between(
+                                            ticket.getCreatedAt(),
+                                            ticket.getResolvedAt())
+                                            .toMillis())
+                            .sum();
+
+            double averageResolutionMilliseconds =
+                    totalResolutionMilliseconds
+                            / ticketsWithResolutionTime.size();
+
+            double averageResolutionTimeHours =
+                    averageResolutionMilliseconds
+                            / (1000.0 * 60.0 * 60.0);
+
+            response.setAverageResolutionTimeHours(
+                    roundToTwoDecimalPlaces(
+                            averageResolutionTimeHours));
+        }
+
         return response;
+    }
+
+    /**
+     * Rounds a numeric analytics value to two decimal places.
+     *
+     * @param value value to round
+     * @return value rounded to two decimal places
+     */
+    private double roundToTwoDecimalPlaces(
+            double value) {
+
+        return Math.round(value * 100.0) / 100.0;
     }
 }

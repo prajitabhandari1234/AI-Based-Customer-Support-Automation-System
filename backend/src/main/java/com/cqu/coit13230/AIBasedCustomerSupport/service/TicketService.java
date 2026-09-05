@@ -1,5 +1,6 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -367,6 +368,13 @@ public class TicketService {
      * </p>
      *
      * <p>
+     * The first escalation time is recorded using the
+     * {@code escalatedAt} lifecycle timestamp. This allows analytics
+     * to determine whether a ticket was historically escalated even
+     * after the ticket later moves to another status.
+     * </p>
+     *
+     * <p>
      * Every active user with the {@link UserRole#SUPPORT_AGENT}
      * role receives an unread notification informing them that
      * the escalated ticket requires human assistance.
@@ -399,6 +407,17 @@ public class TicketService {
         }
 
         ticket.setStatus(TicketStatus.ESCALATED);
+
+        /*
+         * Record the first time the ticket is escalated.
+         * The original timestamp is preserved for historical
+         * escalation-rate analytics.
+         */
+        if (ticket.getEscalatedAt() == null) {
+
+            ticket.setEscalatedAt(
+                    LocalDateTime.now());
+        }
 
         Ticket savedTicket =
                 ticketRepository.save(ticket);
@@ -525,6 +544,11 @@ public class TicketService {
      * <p>
      * Resolution notes are required when a ticket is moved to
      * {@link TicketStatus#RESOLVED} or {@link TicketStatus#CLOSED}.
+     * The first resolution time is recorded in {@code resolvedAt}
+     * for accurate resolution-time analytics.
+     * </p>
+     *
+     * <p>
      * After the ticket is successfully updated, an unread notification
      * is generated for the customer informing them of the status change.
      * </p>
@@ -586,6 +610,10 @@ public class TicketService {
                             + newStatus);
         }
 
+        /*
+         * Resolution notes are mandatory when resolving
+         * or closing a support ticket.
+         */
         if ((newStatus == TicketStatus.RESOLVED
                 || newStatus == TicketStatus.CLOSED)
                 && (request.getResolutionNotes() == null
@@ -602,6 +630,19 @@ public class TicketService {
 
             ticket.setResolutionNotes(
                     request.getResolutionNotes().trim());
+        }
+
+        /*
+         * Record the first time the issue reaches a resolved
+         * or closed state. The timestamp is preserved if the
+         * ticket is later updated again.
+         */
+        if ((newStatus == TicketStatus.RESOLVED
+                || newStatus == TicketStatus.CLOSED)
+                && ticket.getResolvedAt() == null) {
+
+            ticket.setResolvedAt(
+                    LocalDateTime.now());
         }
 
         Ticket savedTicket =

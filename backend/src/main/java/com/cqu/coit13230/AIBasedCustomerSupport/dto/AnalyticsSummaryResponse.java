@@ -8,7 +8,8 @@ import java.util.Map;
  * <p>
  * This DTO is used by the administrator analytics API to provide
  * aggregated ticket information such as totals, status distribution,
- * priority distribution, category distribution, and escalation data.
+ * priority distribution, category distribution, escalation rate,
+ * and average resolution time.
  * </p>
  */
 public class AnalyticsSummaryResponse {
@@ -34,7 +35,13 @@ public class AnalyticsSummaryResponse {
     private Map<String, Long> byCategory;
 
     /**
-     * Number of tickets currently in escalated status.
+     * Number of tickets that have historically been escalated.
+     *
+     * <p>
+     * A ticket is considered historically escalated when its
+     * escalatedAt timestamp is not null, even if its current status
+     * later changes to IN_PROGRESS, RESOLVED, or CLOSED.
+     * </p>
      */
     private long escalatedTickets;
 
@@ -42,6 +49,22 @@ public class AnalyticsSummaryResponse {
      * Number of tickets currently in resolved status.
      */
     private long resolvedTickets;
+
+    /**
+     * Percentage of tickets that have historically been escalated.
+     */
+    private double escalationRatePercent;
+
+    /**
+     * Average time, in hours, between ticket creation and resolution.
+     *
+     * <p>
+     * Only tickets containing a resolvedAt timestamp are included
+     * in this calculation. The value is null when no resolved ticket
+     * timestamps are available.
+     * </p>
+     */
+    private Double averageResolutionTimeHours;
 
     /**
      * Returns the total number of support tickets.
@@ -116,25 +139,27 @@ public class AnalyticsSummaryResponse {
     }
 
     /**
-     * Returns the number of escalated tickets.
+     * Returns the number of tickets that have historically
+     * been escalated.
      *
-     * @return escalated ticket count
+     * @return historically escalated ticket count
      */
     public long getEscalatedTickets() {
         return escalatedTickets;
     }
 
     /**
-     * Sets the number of escalated tickets.
+     * Sets the number of tickets that have historically
+     * been escalated.
      *
-     * @param escalatedTickets escalated ticket count
+     * @param escalatedTickets historically escalated ticket count
      */
     public void setEscalatedTickets(long escalatedTickets) {
         this.escalatedTickets = escalatedTickets;
     }
 
     /**
-     * Returns the number of resolved tickets.
+     * Returns the number of tickets currently in resolved status.
      *
      * @return resolved ticket count
      */
@@ -143,11 +168,57 @@ public class AnalyticsSummaryResponse {
     }
 
     /**
-     * Sets the number of resolved tickets.
+     * Sets the number of tickets currently in resolved status.
      *
      * @param resolvedTickets resolved ticket count
      */
     public void setResolvedTickets(long resolvedTickets) {
         this.resolvedTickets = resolvedTickets;
+    }
+
+    /**
+     * Returns the percentage of tickets that have historically
+     * been escalated.
+     *
+     * @return escalation rate percentage
+     */
+    public double getEscalationRatePercent() {
+        return escalationRatePercent;
+    }
+
+    /**
+     * Sets the percentage of tickets that have historically
+     * been escalated.
+     *
+     * @param escalationRatePercent escalation rate percentage
+     */
+    public void setEscalationRatePercent(
+            double escalationRatePercent) {
+
+        this.escalationRatePercent =
+                escalationRatePercent;
+    }
+
+    /**
+     * Returns the average ticket resolution time in hours.
+     *
+     * @return average resolution time in hours, or null when
+     *         no resolved timestamps are available
+     */
+    public Double getAverageResolutionTimeHours() {
+        return averageResolutionTimeHours;
+    }
+
+    /**
+     * Sets the average ticket resolution time in hours.
+     *
+     * @param averageResolutionTimeHours average resolution time
+     *        in hours
+     */
+    public void setAverageResolutionTimeHours(
+            Double averageResolutionTimeHours) {
+
+        this.averageResolutionTimeHours =
+                averageResolutionTimeHours;
     }
 }
