@@ -2,6 +2,8 @@ package com.cqu.coit13230.AIBasedCustomerSupport.model;
 
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,6 +13,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -41,24 +47,33 @@ public class User {
     /**
      * Full name of the user.
      */
+    @NotBlank(message = "Name is required")
     @Column(nullable = false, length = 100)
     private String name;
 
     /**
      * Email address used to uniquely identify the user's account.
      */
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email should be valid")
     @Column(nullable = false, unique = true)
     private String email;
 
     /**
-     * Securely hashed password used for user authentication.
+     * BCrypt-hashed password used for authentication.
+     *
+     * <p>This property is write-only when converted to JSON so that
+     * password hashes are never returned through API responses.</p>
      */
+    @NotBlank(message = "Password hash is required")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String passwordHash;
 
     /**
      * Role assigned to the user, which determines their system permissions.
      */
+    @NotNull(message = "User role is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
@@ -66,6 +81,7 @@ public class User {
     /**
      * Current status of the user's account.
      */
+    @NotNull(message = "User status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserStatus status;

@@ -12,6 +12,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,12 +23,16 @@ import lombok.Setter;
 /**
  * Represents an entry stored in the customer support knowledge base.
  *
- * <p>Knowledge base entries contain reusable question patterns and
+ * <p>
+ * Knowledge base entries contain reusable question patterns and
  * predefined response templates that can be used by the chatbot to
- * answer common customer enquiries.</p>
+ * answer common customer enquiries.
+ * </p>
  *
- * <p>Each entry also records the user who most recently updated it and
- * the corresponding modification timestamp.</p>
+ * <p>
+ * Each entry also records the user who most recently updated it and
+ * the corresponding modification timestamp.
+ * </p>
  */
 @Entity
 @Table(name = "knowledge_base_entries")
@@ -45,27 +52,33 @@ public class KnowledgeBaseEntry {
     /**
      * Question pattern used to identify matching customer enquiries.
      */
+    @NotBlank(message = "Question pattern is required")
     @Column(nullable = false, length = 500)
     private String questionPattern;
 
     /**
      * Predefined response template associated with the question pattern.
      */
+    @NotBlank(message = "Answer template is required")
     @Column(nullable = false, columnDefinition = "TEXT")
     private String answerTemplate;
 
     /**
      * Category used to organize the knowledge base entry.
      */
+    @NotBlank(message = "Category is required")
     @Column(nullable = false, length = 50)
     private String category;
 
     /**
      * User who most recently created or updated the knowledge base entry.
      *
-     * <p>This relationship is intended for authorized support agents
-     * or administrators responsible for maintaining the knowledge base.</p>
+     * <p>
+     * This relationship is intended for authorized support agents
+     * or administrators responsible for maintaining the knowledge base.
+     * </p>
      */
+    @NotNull(message = "Last updated by user is required")
     @ManyToOne
     @JoinColumn(name = "last_updated_by", nullable = false)
     private User lastUpdatedBy;
