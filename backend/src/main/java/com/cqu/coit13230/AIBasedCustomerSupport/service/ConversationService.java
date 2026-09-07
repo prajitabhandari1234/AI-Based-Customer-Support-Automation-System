@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.ConversationStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.ConversationRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
@@ -16,6 +17,12 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
  * <p>
  * Provides business-layer operations for creating, retrieving,
  * updating, and deleting conversations.
+ * </p>
+ *
+ * <p>
+ * The service also provides secure customer-specific conversation
+ * creation using the authenticated customer's email address rather
+ * than accepting a customer identifier directly from the client.
  * </p>
  */
 @Service
@@ -49,18 +56,67 @@ public class ConversationService {
      *
      * @param conversation the conversation to be saved
      * @return the saved conversation
-     * @throws ResourceNotFoundException if the associated customer does not exist
+     * @throws ResourceNotFoundException if the associated customer
+     *         does not exist
      */
-    public Conversation saveConversation(Conversation conversation) {
+    public Conversation saveConversation(
+            Conversation conversation) {
 
-        Long customerId = conversation.getCustomer().getUserId();
+        Long customerId =
+                conversation.getCustomer().getUserId();
 
-        User customer = userRepository.findById(customerId)
+        User customer = userRepository
+                .findById(customerId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
-                                "Customer not found with ID: " + customerId));
+                                "Customer not found with ID: "
+                                        + customerId));
 
         conversation.setCustomer(customer);
+
+        return conversationRepository.save(conversation);
+    }
+
+    /**
+     * Creates a new conversation for the authenticated customer.
+     *
+     * <p>
+     * The customer is identified using the email address obtained
+     * from JWT authentication. The client does not provide a
+     * customer identifier, which prevents a customer from creating
+     * a conversation for another user's account.
+     * </p>
+     *
+     * <p>
+     * New customer conversations are created with
+     * {@link ConversationStatus#ACTIVE} status.
+     * </p>
+     *
+     * @param customerEmail email address of the authenticated customer
+     * @return newly created customer conversation
+     * @throws ResourceNotFoundException if the authenticated customer
+     *         cannot be found
+     */
+    public Conversation createCustomerConversation(
+            String customerEmail) {
+
+        String normalizedEmail = customerEmail
+                .trim()
+                .toLowerCase();
+
+        User customer = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Customer not found with email: "
+                                        + normalizedEmail));
+
+        Conversation conversation =
+                new Conversation();
+
+        conversation.setCustomer(customer);
+        conversation.setStatus(
+                ConversationStatus.ACTIVE);
 
         return conversationRepository.save(conversation);
     }
@@ -71,6 +127,7 @@ public class ConversationService {
      * @return a list of all conversations
      */
     public List<Conversation> getAllConversations() {
+
         return conversationRepository.findAll();
     }
 
@@ -79,11 +136,14 @@ public class ConversationService {
      *
      * @param conversationId the unique identifier of the conversation
      * @return the conversation associated with the specified identifier
-     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
+     * @throws ResourceNotFoundException if no conversation exists
+     *         with the specified identifier
      */
-    public Conversation getConversationById(Long conversationId) {
+    public Conversation getConversationById(
+            Long conversationId) {
 
-        return conversationRepository.findById(conversationId)
+        return conversationRepository
+                .findById(conversationId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Conversation not found with ID: "
@@ -95,7 +155,9 @@ public class ConversationService {
      *
      * @param conversationId the identifier of the conversation to delete
      */
-    public void deleteConversation(Long conversationId) {
+    public void deleteConversation(
+            Long conversationId) {
+
         conversationRepository.deleteById(conversationId);
     }
 }

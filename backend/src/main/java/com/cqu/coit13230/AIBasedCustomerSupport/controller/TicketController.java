@@ -115,4 +115,26 @@ public class TicketController {
 
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Escalates an open support ticket for human assistance.
+     *
+     * <p>
+     * This operation is restricted to administrators through the
+     * application's security configuration. The actual escalation
+     * business logic is handled by {@link TicketService}.
+     * </p>
+     *
+     * @param ticketId identifier of the ticket to escalate
+     * @return the escalated support ticket
+     */
+    @PutMapping("/{ticketId}/escalate")
+    public ResponseEntity<Ticket> escalateTicket(
+            @PathVariable Long ticketId) {
+
+        Ticket escalatedTicket =
+                ticketService.escalateTicket(ticketId);
+
+        return ResponseEntity.ok(escalatedTicket);
+    }
 }

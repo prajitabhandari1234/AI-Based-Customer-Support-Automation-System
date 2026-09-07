@@ -26,6 +26,12 @@ import jakarta.validation.Valid;
  * Provides API endpoints for creating, retrieving, updating,
  * and deleting conversations through the {@link ConversationService}.
  * </p>
+ *
+ * <p>
+ * These generic conversation endpoints are intended for administrator
+ * access. Customer-specific conversation creation is handled through
+ * {@code /api/customer/conversations}.
+ * </p>
  */
 @RestController
 @RequestMapping("/api/conversations")
@@ -39,7 +45,9 @@ public class ConversationController {
      *
      * @param conversationService service used to manage conversation operations
      */
-    public ConversationController(ConversationService conversationService) {
+    public ConversationController(
+            ConversationService conversationService) {
+
         this.conversationService = conversationService;
     }
 
@@ -50,6 +58,7 @@ public class ConversationController {
      */
     @GetMapping
     public List<Conversation> getAllConversations() {
+
         return conversationService.getAllConversations();
     }
 
@@ -58,14 +67,16 @@ public class ConversationController {
      *
      * @param conversationId the identifier of the conversation
      * @return the requested conversation
-     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
+     * @throws ResourceNotFoundException if no conversation exists
+     *         with the specified identifier
      */
     @GetMapping("/{conversationId}")
     public ResponseEntity<Conversation> getConversationById(
             @PathVariable Long conversationId) {
 
         return ResponseEntity.ok(
-                conversationService.getConversationById(conversationId));
+                conversationService.getConversationById(
+                        conversationId));
     }
 
     /**
@@ -78,7 +89,8 @@ public class ConversationController {
     public Conversation createConversation(
             @Valid @RequestBody Conversation conversation) {
 
-        return conversationService.saveConversation(conversation);
+        return conversationService
+                .saveConversation(conversation);
     }
 
     /**
@@ -87,19 +99,23 @@ public class ConversationController {
      * @param conversationId the identifier of the conversation to update
      * @param conversation the updated conversation information
      * @return the updated conversation
-     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
+     * @throws ResourceNotFoundException if no conversation exists
+     *         with the specified identifier
      */
     @PutMapping("/{conversationId}")
     public ResponseEntity<Conversation> updateConversation(
             @PathVariable Long conversationId,
             @Valid @RequestBody Conversation conversation) {
 
-        conversationService.getConversationById(conversationId);
+        conversationService
+                .getConversationById(conversationId);
 
-        conversation.setConversationId(conversationId);
+        conversation.setConversationId(
+                conversationId);
 
         return ResponseEntity.ok(
-                conversationService.saveConversation(conversation));
+                conversationService
+                        .saveConversation(conversation));
     }
 
     /**
@@ -107,16 +123,21 @@ public class ConversationController {
      *
      * @param conversationId the identifier of the conversation to delete
      * @return HTTP 204 when the conversation is deleted successfully
-     * @throws ResourceNotFoundException if no conversation exists with the specified identifier
+     * @throws ResourceNotFoundException if no conversation exists
+     *         with the specified identifier
      */
     @DeleteMapping("/{conversationId}")
     public ResponseEntity<Void> deleteConversation(
             @PathVariable Long conversationId) {
 
-        conversationService.getConversationById(conversationId);
+        conversationService
+                .getConversationById(conversationId);
 
-        conversationService.deleteConversation(conversationId);
+        conversationService
+                .deleteConversation(conversationId);
 
-        return ResponseEntity.noContent().build();
+        return ResponseEntity
+                .noContent()
+                .build();
     }
 }
