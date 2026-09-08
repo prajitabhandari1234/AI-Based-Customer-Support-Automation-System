@@ -13,26 +13,14 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Represents an entry stored in the customer support knowledge base.
- *
- * <p>
- * Knowledge base entries contain reusable question patterns and
- * predefined response templates that can be used by the chatbot to
- * answer common customer enquiries.
- * </p>
- *
- * <p>
- * Each entry also records the user who most recently updated it and
- * the corresponding modification timestamp.
- * </p>
+ * Stores a question pattern and answer used by the knowledge base.
+ * The model is persisted with JPA and is used by the related service and repository classes.
  */
 @Entity
 @Table(name = "knowledge_base_entries")
@@ -42,68 +30,38 @@ import lombok.Setter;
 @AllArgsConstructor
 public class KnowledgeBaseEntry {
 
-    /**
-     * Unique identifier for the knowledge base entry.
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long kbId;
 
-    /**
-     * Question pattern used to identify matching customer enquiries.
-     */
     @NotBlank(message = "Question pattern is required")
     @Column(nullable = false, length = 500)
     private String questionPattern;
 
-    /**
-     * Predefined response template associated with the question pattern.
-     */
     @NotBlank(message = "Answer template is required")
     @Column(nullable = false, columnDefinition = "TEXT")
     private String answerTemplate;
 
-    /**
-     * Category used to organize the knowledge base entry.
-     */
     @NotBlank(message = "Category is required")
     @Column(nullable = false, length = 50)
     private String category;
 
-    /**
-     * User who most recently created or updated the knowledge base entry.
-     *
-     * <p>
-     * This relationship is intended for authorized support agents
-     * or administrators responsible for maintaining the knowledge base.
-     * </p>
-     */
-    @NotNull(message = "Last updated by user is required")
+    @Column(nullable = false)
+    private Boolean active = true;
+
     @ManyToOne
-    @JoinColumn(name = "last_updated_by", nullable = false)
+    @JoinColumn(name = "last_updated_by")
     private User lastUpdatedBy;
 
-    /**
-     * Date and time when the knowledge base entry was most recently updated.
-     */
     @Column(nullable = false)
     private LocalDateTime lastUpdatedAt;
 
-    /**
-     * Initializes the modification timestamp before the entity is first
-     * persisted in the database.
-     */
     @PrePersist
-    protected void onCreate() {
-        lastUpdatedAt = LocalDateTime.now();
-    }
-
-    /**
-     * Updates the modification timestamp before changes to the entity
-     * are persisted in the database.
-     */
     @PreUpdate
-    protected void onUpdate() {
+    protected void updateTimestamp() {
         lastUpdatedAt = LocalDateTime.now();
+        if (active == null) {
+            active = true;
+        }
     }
 }

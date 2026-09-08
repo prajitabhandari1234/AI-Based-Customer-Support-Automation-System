@@ -12,22 +12,19 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Represents a user within the AI-Based Customer Support system.
- * A user may have the role of customer, support agent, or administrator.
- *
- * <p>This entity stores user account information including authentication
- * details, role, account status, and account creation timestamp.</p>
+ * Stores account details and access role for a system user.
+ * The model is persisted with JPA and is used by the related service and repository classes.
  */
 @Entity
 @Table(name = "users")
@@ -37,67 +34,62 @@ import lombok.Setter;
 @AllArgsConstructor
 public class User {
 
-    /**
-     * Unique identifier for the user.
-     */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long userId;
 
-    /**
-     * Full name of the user.
-     */
     @NotBlank(message = "Name is required")
     @Column(nullable = false, length = 100)
     private String name;
 
-    /**
-     * Email address used to uniquely identify the user's account.
-     */
     @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 190)
     private String email;
 
-    /**
-     * BCrypt-hashed password used for authentication.
-     *
-     * <p>This property is write-only when converted to JSON so that
-     * password hashes are never returned through API responses.</p>
-     */
     @NotBlank(message = "Password hash is required")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String passwordHash;
 
-    /**
-     * Role assigned to the user, which determines their system permissions.
-     */
     @NotNull(message = "User role is required")
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private UserRole role;
+    @Column(nullable = false, length = 30)
+    private UserRole role = UserRole.CLIENT;
 
-    /**
-     * Current status of the user's account.
-     */
     @NotNull(message = "User status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private UserStatus status;
+    private UserStatus status = UserStatus.ACTIVE;
 
-    /**
-     * Date and time when the user account was created.
-     */
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /**
-     * Sets the account creation timestamp before the entity is first
-     * persisted to the database.
-     */
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @JsonProperty("id")
+    public Long getIdAlias() {
+        return userId;
+    }
+
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
+        normalizeEmail();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+        normalizeEmail();
+    }
+
+    private void normalizeEmail() {
+        if (email != null) {
+            email = email.trim().toLowerCase();
+        }
     }
 }

@@ -1,12 +1,16 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.config;
 
+import java.util.Arrays;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -16,216 +20,98 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.cqu.coit13230.AIBasedCustomerSupport.security.JwtAuthenticationFilter;
 
 /**
- * Security configuration for JWT authentication, role-based access control,
- * and Cross-Origin Resource Sharing (CORS) within the application.
- *
- * <p>
- * Public authentication endpoints are accessible without a JWT.
- * Protected endpoints require authentication and may additionally
- * restrict access according to the authenticated user's role.
- * </p>
+ * Configures endpoint security, CORS and password encoding.
+ * The rules define which routes are public and which require customer, agent or admin access.
  */
 @Configuration
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    /**
-     * Constructs the security configuration.
-     *
-     * @param jwtAuthenticationFilter filter used to validate JWT tokens
-     */
-    public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter) {
-
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
-    /**
-     * Configures JWT authentication, CORS, and role-based endpoint access.
-     *
-     * @param http Spring Security HTTP configuration
-     * @return configured security filter chain
-     * @throws Exception if security configuration fails
+    /*
+     * Defines the endpoint access rules used by Spring Security.
+     * Public routes are permitted first, followed by role-specific customer, agent and admin routes.
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
-            throws Exception {
-
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-
-                .cors(cors -> cors.configurationSource(
-                        corsConfigurationSource()))
-
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS))
-
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
-
-                        /*
-                         * Authentication endpoints are publicly accessible.
-                         */
                         .requestMatchers(
+                                "/api/auth/login",
                                 "/api/auth/register",
-                                "/api/auth/login")
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/h2-console/**")
                         .permitAll()
-
-                        /*
-                         * User management is restricted to administrators.
-                         */
-                        .requestMatchers("/api/users/**")
+                        .requestMatchers("/api/admin/**", "/api/analytics/**", "/api/users/**", "/api/system-logs/**")
                         .hasRole("ADMIN")
-
-                        /*
-                         * Administrator-specific endpoints.
-                         */
-                        .requestMatchers("/api/admin/**")
-                        .hasRole("ADMIN")
-
-                        /*
-                         * Support-agent endpoints.
-                         */
                         .requestMatchers("/api/agent/**")
-                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
-
-                        /*
-                         * Customer-specific endpoints.
-                         */
-                        .requestMatchers("/api/customer/**")
-                        .hasRole("CUSTOMER")
-
-                        /*
-                         * Generic ticket endpoints are restricted to
-                         * administrators. Customers and support agents
-                         * should use their role-specific ticket APIs.
-                         */
-                        .requestMatchers("/api/tickets/**")
+                        .hasAnyRole("AGENT", "ADMIN")
+                        .requestMatchers("/api/customer/**", "/api/chat/**")
+                        .hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/api/knowledge-base/**", "/api/knowledge/**")
+                        .authenticated()
+                        .requestMatchers("/api/knowledge-base/**", "/api/knowledge/**")
+                        .hasAnyRole("AGENT", "ADMIN")
+                        .requestMatchers("/api/conversations/**", "/api/messages/**")
                         .hasRole("ADMIN")
-
-                        /*
-                         * Generic conversation endpoints are restricted
-                         * to administrators to prevent users from
-                         * accessing conversations outside their role.
-                         */
-                        .requestMatchers("/api/conversations/**")
-                        .hasRole("ADMIN")
-
-                        /*
-                         * Generic message endpoints are restricted to
-                         * administrators. Customer and agent message
-                         * operations should use secure role-specific APIs.
-                         */
-                        .requestMatchers("/api/messages/**")
-                        .hasRole("ADMIN")
-
-                        /*
-                         * Generic notification endpoints are restricted
-                         * to administrators. Customers and support agents
-                         * access notifications through role-specific APIs.
-                         */
+                        .requestMatchers(HttpMethod.GET, "/api/notifications")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/notifications/*/read")
+                        .authenticated()
                         .requestMatchers("/api/notifications/**")
                         .hasRole("ADMIN")
-
-                        /*
-                         * Knowledge base entries may be viewed by any
-                         * authenticated user.
-                         */
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/knowledge-base/**")
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/my", "/api/tickets/my/summary")
+                        .hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/api/tickets/*/messages")
                         .authenticated()
-
-                        /*
-                         * Only support agents and administrators may
-                         * create knowledge base entries.
-                         */
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/knowledge-base/**")
-                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
-
-                        /*
-                         * Only support agents and administrators may
-                         * update knowledge base entries.
-                         */
-                        .requestMatchers(
-                                HttpMethod.PUT,
-                                "/api/knowledge-base/**")
-                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
-
-                        /*
-                         * Only support agents and administrators may
-                         * delete knowledge base entries.
-                         */
-                        .requestMatchers(
-                                HttpMethod.DELETE,
-                                "/api/knowledge-base/**")
-                        .hasAnyRole("SUPPORT_AGENT", "ADMIN")
-
-                        /*
-                         * Remaining API endpoints require authentication.
-                         */
-                        .requestMatchers("/api/**")
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/*")
                         .authenticated()
-
+                        .requestMatchers(HttpMethod.POST, "/api/tickets")
+                        .hasAnyRole("CLIENT", "ADMIN")
+                        .requestMatchers("/api/tickets/**")
+                        .hasRole("ADMIN")
                         .anyRequest()
-                        .permitAll())
-
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class);
+                        .authenticated())
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    /**
-     * Configures Cross-Origin Resource Sharing (CORS) for frontend
-     * applications communicating with the backend REST API.
-     *
-     * <p>
-     * During development, requests from the local React development
-     * server are permitted. The allowed origin should be updated when
-     * the frontend is deployed to a production environment.
-     * </p>
-     *
-     * @return configured CORS configuration source
-     */
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
-        CorsConfiguration configuration =
-                new CorsConfiguration();
+    // Builds the CORS rules from the configured frontend origin list instead of hard-coding one client URL.
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins}") String allowedOrigins) {
 
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://localhost:3000"));
-
-        configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "PATCH",
-                "DELETE",
-                "OPTIONS"));
-
-        configuration.setAllowedHeaders(List.of(
-                "Authorization",
-                "Content-Type"));
-
-        configuration.setExposedHeaders(List.of(
-                "Authorization"));
-
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(
+                Arrays.stream(allowedOrigins.split(","))
+                        .map(String::trim)
+                        .filter(value -> !value.isBlank())
+                        .toList());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setExposedHeaders(List.of("Authorization"));
         configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration(
-                "/**",
-                configuration);
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 }
