@@ -1,6 +1,5 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -9,24 +8,18 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Carries the details submitted when a customer registers.
+ * Carries a customer message and optional ticket reference for chat.
  * The DTO is used to validate and transfer request data into the service layer.
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class RegisterRequest {
+public class ChatRequest {
 
     @NotBlank
-    @Size(min = 2, max = 120)
-    private String name;
+    @Size(max = 10000)
+    private String message;
 
-    @NotBlank
-    @Email
-    private String email;
-
-    @NotBlank
-    @Size(min = 8, max = 100)
-    private String password;
+    private Long ticketId;
 }

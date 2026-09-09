@@ -1,7 +1,6 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.dto;
 
-import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
-import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -10,18 +9,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Carries role and status changes made by an admin.
+ * Carries a ticket status change from the frontend.
  * The DTO is used to validate and transfer request data into the service layer.
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class AdminUserUpdateRequest {
+public class TicketStatusRequest {
 
     @NotNull
-    private UserRole role;
-
-    @NotNull
-    private UserStatus status;
+    private TicketStatus status;
+    private String resolutionNotes;
 }

@@ -1,12 +1,12 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.exception;
 
 /**
- * Used when a requested database record cannot be found.
+ * Used when a request contains invalid application data.
  * The global exception handler converts it into a suitable HTTP error response.
  */
-public class ResourceNotFoundException extends RuntimeException {
+public class BadRequestException extends RuntimeException {
 
-    public ResourceNotFoundException(String message) {
+    public BadRequestException(String message) {
         super(message);
     }
 }

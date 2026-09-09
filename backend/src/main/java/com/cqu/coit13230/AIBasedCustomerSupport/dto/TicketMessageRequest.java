@@ -1,26 +1,27 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.dto;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Carries the email and password submitted during login.
+ * Carries a new message submitted to an existing ticket.
  * The DTO is used to validate and transfer request data into the service layer.
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginRequest {
+public class TicketMessageRequest {
 
-    @NotBlank
-    @Email
-    private String email;
+    private String message;
+    private String content;
 
-    @NotBlank
-    private String password;
+    public String text() {
+        if (message != null && !message.isBlank()) {
+            return message;
+        }
+        return content;
+    }
 }

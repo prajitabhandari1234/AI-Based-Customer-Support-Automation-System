@@ -1,85 +1,101 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketCategory;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketPriority;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
- * Represents detailed information about a support ticket together
- * with the message history of its associated conversation.
- *
- * <p>
- * This response object is used when an authenticated customer views
- * an individual support ticket. It combines ticket information with
- * the complete chronological conversation history.
- * </p>
+ * Returns full ticket details together with its messages.
+ * The DTO keeps API response data separate from the database entities.
  */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class TicketDetailsResponse {
 
-    /**
-     * Support ticket requested by the customer.
-     */
     private Ticket ticket;
-
-    /**
-     * Messages belonging to the conversation associated with the ticket.
-     */
+    private TicketSummaryResponse summary;
+    private String escalationReason;
+    private String resolutionNotes;
+    private LocalDateTime firstResponseAt;
+    private LocalDateTime resolvedAt;
+    private LocalDateTime closedAt;
     private List<Message> messages;
 
-    /**
-     * Constructs an empty {@code TicketDetailsResponse}.
-     */
-    public TicketDetailsResponse() {
+    // Combines the ticket and its messages into one frontend response.
+    public static TicketDetailsResponse from(Ticket ticket, List<Message> messages) {
+        return new TicketDetailsResponse(
+                ticket,
+                TicketSummaryResponse.from(ticket),
+                ticket.getEscalationReason(),
+                ticket.getResolutionNotes(),
+                ticket.getFirstResponseAt(),
+                ticket.getResolvedAt(),
+                ticket.getClosedAt(),
+                messages);
     }
 
-    /**
-     * Constructs a new {@code TicketDetailsResponse}.
-     *
-     * @param ticket support ticket information
-     * @param messages conversation messages associated with the ticket
-     */
-    public TicketDetailsResponse(
-            Ticket ticket,
-            List<Message> messages) {
-
-        this.ticket = ticket;
-        this.messages = messages;
+    @JsonProperty("id")
+    public Long getIdAlias() {
+        return ticket == null ? null : ticket.getTicketId();
     }
 
-    /**
-     * Returns the support ticket.
-     *
-     * @return support ticket information
-     */
-    public Ticket getTicket() {
-        return ticket;
+    @JsonProperty("ticketId")
+    public Long getTicketIdAlias() {
+        return ticket == null ? null : ticket.getTicketId();
     }
 
-    /**
-     * Sets the support ticket.
-     *
-     * @param ticket support ticket information
-     */
-    public void setTicket(Ticket ticket) {
-        this.ticket = ticket;
+    @JsonProperty("title")
+    public String getTitleAlias() {
+        return ticket == null ? null : ticket.getTitle();
     }
 
-    /**
-     * Returns the conversation message history.
-     *
-     * @return ordered list of conversation messages
-     */
-    public List<Message> getMessages() {
-        return messages;
+    @JsonProperty("customer")
+    public User getCustomerAlias() {
+        return ticket == null ? null : ticket.getCustomer();
     }
 
-    /**
-     * Sets the conversation message history.
-     *
-     * @param messages conversation messages
-     */
-    public void setMessages(List<Message> messages) {
-        this.messages = messages;
+    @JsonProperty("assignedAgent")
+    public User getAssignedAgentAlias() {
+        return ticket == null ? null : ticket.getAssignedAgent();
     }
+
+    @JsonProperty("category")
+    public TicketCategory getCategoryAlias() {
+        return ticket == null ? null : ticket.getCategory();
+    }
+
+    @JsonProperty("priority")
+    public TicketPriority getPriorityAlias() {
+        return ticket == null ? null : ticket.getPriority();
+    }
+
+    @JsonProperty("status")
+    public TicketStatus getStatusAlias() {
+        return ticket == null ? null : ticket.getStatus();
+    }
+
+    @JsonProperty("sentimentScore")
+    public Double getSentimentScoreAlias() {
+        return ticket == null ? null : ticket.getSentimentScore();
+    }
+
+    @JsonProperty("aiConfidenceScore")
+    public Double getAiConfidenceScoreAlias() {
+        return ticket == null ? null : ticket.getAiConfidenceScore();
+    }
+
 }

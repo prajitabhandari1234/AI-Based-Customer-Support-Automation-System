@@ -7,65 +7,36 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Request object used by administrators to create user accounts.
- *
- * <p>
- * Administrators may create customer, support-agent, or administrator
- * accounts and specify the initial account status.
- * </p>
- *
- * <p>
- * The supplied password is never stored directly. It is securely hashed
- * by the service layer before the user account is persisted.
- * </p>
+ * Carries user details submitted by an admin when creating an account.
+ * The DTO is used to validate and transfer request data into the service layer.
  */
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
 public class AdminUserCreateRequest {
 
-    /**
-     * Full name of the user.
-     */
-    @NotBlank(message = "Name is required")
+    @NotBlank
+    @Size(max = 120)
     private String name;
 
-    /**
-     * Email address used to identify and authenticate the user.
-     */
-    @NotBlank(message = "Email is required")
-    @Email(message = "Email address must be valid")
+    @NotBlank
+    @Email
     private String email;
 
-    /**
-     * Plain-text password supplied during account creation.
-     *
-     * <p>
-     * The password is converted to a secure BCrypt hash before
-     * being stored.
-     * </p>
-     */
-    @NotBlank(message = "Password is required")
-    @Size(
-            min = 8,
-            message = "Password must contain at least 8 characters")
+    @NotBlank
+    @Size(min = 8, max = 100)
     private String password;
 
-    /**
-     * Role assigned to the new user.
-     */
-    @NotNull(message = "User role is required")
+    @NotNull
     private UserRole role;
 
-    /**
-     * Initial status assigned to the new user account.
-     */
-    @NotNull(message = "User status is required")
+    @NotNull
     private UserStatus status;
 }
