@@ -1,20 +1,16 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.repository;
 
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.model.SystemLog;
 
 /**
- * Repository interface for managing {@link SystemLog} entities.
- *
- * <p>
- * Provides standard CRUD operations and database access for
- * system log records through Spring Data JPA.
- * </p>
+ * Provides database access for system logs.
+ * Spring Data JPA provides the standard CRUD operations while this interface adds project-specific lookups.
  */
-@Repository
-public interface SystemLogRepository
-        extends JpaRepository<SystemLog, Long> {
+public interface SystemLogRepository extends JpaRepository<SystemLog, Long> {
 
+    List<SystemLog> findAllByOrderByCreatedAtDesc();
 }

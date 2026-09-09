@@ -1,20 +1,18 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.repository;
 
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.model.KnowledgeBaseEntry;
 
 /**
- * Repository interface for managing {@link KnowledgeBaseEntry} entities.
- *
- * <p>
- * Provides standard CRUD operations and database access for
- * knowledge base records through Spring Data JPA.
- * </p>
+ * Provides database access for knowledge base entries.
+ * Spring Data JPA provides the standard CRUD operations while this interface adds project-specific lookups.
  */
-@Repository
-public interface KnowledgeBaseEntryRepository
-        extends JpaRepository<KnowledgeBaseEntry, Long> {
+public interface KnowledgeBaseEntryRepository extends JpaRepository<KnowledgeBaseEntry, Long> {
 
+    List<KnowledgeBaseEntry> findAllByOrderByCategoryAscQuestionPatternAsc();
+
+    List<KnowledgeBaseEntry> findByActiveTrueOrderByCategoryAscQuestionPatternAsc();
 }
