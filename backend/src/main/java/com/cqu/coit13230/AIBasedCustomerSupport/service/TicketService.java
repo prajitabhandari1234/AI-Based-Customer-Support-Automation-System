@@ -2,773 +2,901 @@ package com.cqu.coit13230.AIBasedCustomerSupport.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentMessageRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.AgentTicketUpdateRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.AiAnalysisResponse;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.ChatResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketMessageRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketStatusRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketSummaryResponse;
+import com.cqu.coit13230.AIBasedCustomerSupport.exception.BadRequestException;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ForbiddenOperationException;
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.ResourceNotFoundException;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.ConversationStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Message;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.SenderType;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.Sentiment;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketCategory;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketPriority;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.TicketStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.UserStatus;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.ConversationRepository;
-import com.cqu.coit13230.AIBasedCustomerSupport.repository.MessageRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.TicketRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
+import com.cqu.coit13230.AIBasedCustomerSupport.service.AiService.AiResult;
 
 /**
- * Service class responsible for managing {@link Ticket} entities.
- *
- * <p>
- * Provides business-layer operations for creating, retrieving,
- * updating, escalating, assigning, and managing customer support tickets.
- * </p>
- *
- * <p>
- * The service also provides secure customer-specific and
- * support-agent-specific ticket operations. Customer and support-agent
- * identities are obtained from JWT authentication rather than being
- * supplied directly by the client.
- * </p>
- *
- * <p>
- * Ticket-related events may generate notifications for customers
- * and support agents through the {@link NotificationService}.
- * Important ticket lifecycle events are also recorded through
- * {@link SystemLogService} for system auditing.
- * </p>
+ * Handles ticket, chat, assignment and escalation workflows.
+ * Most ticket state changes, access checks and customer/agent message flows are handled here.
  */
 @Service
 public class TicketService {
 
-    /**
-     * Repository used to access support ticket records.
-     */
     private final TicketRepository ticketRepository;
-
-    /**
-     * Repository used to access customer conversations.
-     */
     private final ConversationRepository conversationRepository;
-
-    /**
-     * Repository used to access user records.
-     */
     private final UserRepository userRepository;
-
-    /**
-     * Repository used to access conversation messages.
-     */
-    private final MessageRepository messageRepository;
-
-    /**
-     * Service used to generate ticket-related notifications.
-     */
+    private final UserService userService;
+    private final MessageService messageService;
     private final NotificationService notificationService;
-
-    /**
-     * Service used to record ticket-related system activity.
-     */
     private final SystemLogService systemLogService;
+    private final AiService aiService;
 
-    /**
-     * Constructs a new {@code TicketService} with the required
-     * repository and service dependencies.
-     *
-     * @param ticketRepository repository used to access ticket data
-     * @param conversationRepository repository used to access conversation data
-     * @param userRepository repository used to access user data
-     * @param messageRepository repository used to access message data
-     * @param notificationService service used to generate ticket notifications
-     * @param systemLogService service used to record ticket-related system events
-     */
     public TicketService(
             TicketRepository ticketRepository,
             ConversationRepository conversationRepository,
             UserRepository userRepository,
-            MessageRepository messageRepository,
+            UserService userService,
+            MessageService messageService,
             NotificationService notificationService,
-            SystemLogService systemLogService) {
+            SystemLogService systemLogService,
+            AiService aiService) {
 
         this.ticketRepository = ticketRepository;
         this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
-        this.messageRepository = messageRepository;
+        this.userService = userService;
+        this.messageService = messageService;
         this.notificationService = notificationService;
         this.systemLogService = systemLogService;
+        this.aiService = aiService;
     }
 
-    /**
-     * Creates a support ticket for an authenticated customer.
-     *
-     * <p>
-     * The customer is identified using the email address stored in the
-     * authenticated JWT. The method verifies that the requested
-     * conversation exists and belongs to the authenticated customer
-     * before creating the ticket.
-     * </p>
-     *
-     * @param request information required to create the ticket
-     * @param customerEmail email address of the authenticated customer
-     * @return the newly created support ticket
-     * @throws ResourceNotFoundException if the customer or conversation
-     *         cannot be found
-     * @throws ForbiddenOperationException if the conversation does not
-     *         belong to the authenticated customer
+    /*
+     * Starts a new customer conversation and stores the first message before running AI analysis.
+     * A ticket is then created from the analysis and linked back to the conversation.
      */
-    public Ticket createCustomerTicket(
-            CreateTicketRequest request,
-            String customerEmail) {
+    @Transactional
+    public ChatResponse startChat(String customerMessage) {
+        User customer = requireCustomer(userService.currentUser());
 
-        String normalizedEmail = customerEmail
-                .trim()
-                .toLowerCase();
+        AiResult result = aiService.analyse(customerMessage);
 
-        User customer = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Customer not found with email: "
-                                        + normalizedEmail));
-
-        Conversation conversation = conversationRepository
-                .findById(request.getConversationId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Conversation not found with ID: "
-                                        + request.getConversationId()));
-
-        if (!conversation.getCustomer()
-                .getUserId()
-                .equals(customer.getUserId())) {
-
-            throw new ForbiddenOperationException(
-                    "Conversation does not belong to the authenticated customer");
+        // Reject unrelated requests before creating a support conversation or ticket.
+        if (!result.inScope()) {
+            return new ChatResponse(
+                    result.reply(),
+                    null,
+                    null);
         }
 
-        Ticket ticket = new Ticket();
+        Conversation conversation = createConversation(customer);
 
+        messageService.createMessage(
+                conversation,
+                customer,
+                SenderType.CLIENT,
+                customerMessage,
+                result.sentiment(),
+                result.sentimentScore());
+
+        Ticket ticket = createAiTicket(
+                conversation,
+                customer,
+                titleFrom(customerMessage),
+                result);
+
+        messageService.createMessage(
+                conversation,
+                null,
+                SenderType.AI,
+                result.reply(),
+                Sentiment.NEUTRAL,
+                0.0);
+
+        ticket.setFirstResponseAt(LocalDateTime.now());
+        finishConversationFromTicket(conversation, ticket);
+        ticket = ticketRepository.save(ticket);
+        conversationRepository.save(conversation);
+
+        afterAiProcessing(ticket, result);
+        return chatResponse(ticket, result);
+    }
+
+    /*
+     * Continues an existing chat by saving the customer message and running AI analysis again.
+     * The latest AI values are copied onto the same ticket so its state stays up to date.
+     */
+    @Transactional
+    public ChatResponse continueChat(Long ticketId, String customerMessage) {
+        User customer = requireCustomer(userService.currentUser());
+        Ticket ticket = getTicketById(ticketId);
+        assertCustomerOwnsTicket(ticket, customer);
+
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new BadRequestException("This ticket is closed");
+        }
+
+        AiResult result = aiService.analyse(customerMessage);
+
+        if (!result.inScope()) {
+            return new ChatResponse(
+                    result.reply(),
+                    TicketSummaryResponse.from(ticket),
+                    null);
+        }
+
+        Conversation conversation = ticket.getConversation();
+        if (conversation.getStatus() == ConversationStatus.COMPLETED) {
+            conversation.setStatus(ConversationStatus.ACTIVE);
+            conversation.setEndedAt(null);
+        }
+
+        messageService.createMessage(
+                conversation,
+                customer,
+                SenderType.CLIENT,
+                customerMessage,
+                result.sentiment(),
+                result.sentimentScore());
+
+        TicketPriority previousPriority = ticket.getPriority();
+        applyAiResult(ticket, result);
+        ticket.setPriority(higherPriority(previousPriority, result.priority()));
+
+        messageService.createMessage(
+                conversation,
+                null,
+                SenderType.AI,
+                result.reply(),
+                Sentiment.NEUTRAL,
+                0.0);
+
+        if (ticket.getFirstResponseAt() == null) {
+            ticket.setFirstResponseAt(LocalDateTime.now());
+        }
+
+        finishConversationFromTicket(conversation, ticket);
+        ticket = ticketRepository.save(ticket);
+        conversationRepository.save(conversation);
+
+        if (ticket.isEscalated() && ticket.getAssignedAgent() != null) {
+            notificationService.createTicketNotification(
+                    ticket.getAssignedAgent(),
+                    ticket,
+                    "New customer message on ticket #" + ticket.getTicketId());
+        }
+
+        systemLogService.logAiResponse(ticket, "AI processed a customer chat message");
+        return chatResponse(ticket, result);
+    }
+
+    @Transactional
+    public Ticket createCustomerTicket(CreateTicketRequest request, String customerEmail) {
+        User customer = requireCustomerByEmail(customerEmail);
+
+        if (request.getConversationId() == null) {
+            if (request.getMessage() != null && !request.getMessage().isBlank()) {
+                return createManualTicket(request, customer);
+            }
+            throw new BadRequestException("conversationId is required");
+        }
+
+        Conversation conversation = getConversation(request.getConversationId());
+        assertCustomerOwnsConversation(conversation, customer);
+
+        Ticket ticket = new Ticket();
         ticket.setConversation(conversation);
         ticket.setCustomer(customer);
-        ticket.setAssignedAgent(null);
-        ticket.setCategory(request.getCategory());
-        ticket.setPriority(request.getPriority());
+        ticket.setTitle(defaultTitle(request.getTitle(), "Customer support ticket"));
+        ticket.setCategory(defaultCategory(request.getCategory()));
+        ticket.setPriority(defaultPriority(request.getPriority()));
         ticket.setStatus(TicketStatus.OPEN);
 
-        Ticket savedTicket =
-                ticketRepository.save(ticket);
-
-        /*
-         * Record the successful creation of the support ticket
-         * after persistence so the generated ticket ID is available.
-         */
+        Ticket savedTicket = ticketRepository.save(ticket);
         systemLogService.logTicketCreated(savedTicket);
-
         return savedTicket;
     }
 
-    /**
-     * Retrieves the support ticket history of an authenticated customer.
-     *
-     * @param customerEmail email address of the authenticated customer
-     * @return list of support tickets belonging to the customer
-     * @throws ResourceNotFoundException if the authenticated customer
-     *         cannot be found
-     */
-    public List<Ticket> getCustomerTicketHistory(
-            String customerEmail) {
-
-        String normalizedEmail = customerEmail
-                .trim()
-                .toLowerCase();
-
-        User customer = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Customer not found with email: "
-                                        + normalizedEmail));
-
-        return ticketRepository
-                .findByCustomerUserIdOrderByCreatedAtDesc(
-                        customer.getUserId());
+    @Transactional
+    public TicketDetailsResponse createManualTicket(CreateTicketRequest request) {
+        User customer = requireCustomer(userService.currentUser());
+        Ticket ticket = createManualTicket(request, customer);
+        return details(ticket);
     }
 
-    /**
-     * Retrieves detailed ticket information and the associated
-     * conversation history for an authenticated customer.
-     *
-     * @param ticketId unique identifier of the requested ticket
-     * @param customerEmail email address of the authenticated customer
-     * @return ticket details together with conversation message history
-     * @throws ResourceNotFoundException if the customer or ticket
-     *         cannot be found
-     * @throws ForbiddenOperationException if the ticket does not belong
-     *         to the authenticated customer
-     */
-    public TicketDetailsResponse getCustomerTicketDetails(
-            Long ticketId,
-            String customerEmail) {
-
-        String normalizedEmail = customerEmail
-                .trim()
-                .toLowerCase();
-
-        User customer = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Customer not found with email: "
-                                        + normalizedEmail));
-
-        Ticket ticket = ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
-
-        if (!ticket.getCustomer()
-                .getUserId()
-                .equals(customer.getUserId())) {
-
-            throw new ForbiddenOperationException(
-                    "Ticket does not belong to the authenticated customer");
+    // Creates a customer ticket without an AI chat flow and sends it directly to human support.
+    private Ticket createManualTicket(CreateTicketRequest request, User customer) {
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            throw new BadRequestException("message is required for a manual ticket");
         }
 
-        Long conversationId =
-                ticket.getConversation().getConversationId();
+        Conversation conversation;
+        if (request.getConversationId() == null) {
+            conversation = createConversation(customer);
+        } else {
+            conversation = getConversation(request.getConversationId());
+            assertCustomerOwnsConversation(conversation, customer);
+        }
 
-        List<Message> messages =
-                messageRepository
-                        .findByConversationConversationIdOrderByCreatedAtAsc(
-                                conversationId);
+        AiResult result = aiService.analyse(request.getMessage());
 
-        return new TicketDetailsResponse(
-                ticket,
-                messages);
+        if (!result.inScope()) {
+            throw new BadRequestException(result.reply());
+        }
+
+        messageService.createMessage(
+                conversation,
+                customer,
+                SenderType.CLIENT,
+                request.getMessage(),
+                result.sentiment(),
+                result.sentimentScore());
+
+        Ticket ticket = new Ticket();
+        ticket.setConversation(conversation);
+        ticket.setCustomer(customer);
+        ticket.setTitle(defaultTitle(request.getTitle(), titleFrom(request.getMessage())));
+        ticket.setCategory(request.getCategory() == null ? result.category() : request.getCategory());
+        ticket.setPriority(request.getPriority() == null ? result.priority() : request.getPriority());
+        ticket.setStatus(TicketStatus.ESCALATED);
+        ticket.setSentiment(result.sentiment());
+        ticket.setSentimentScore(result.sentimentScore());
+        ticket.setAiConfidenceScore(result.confidence());
+        ticket.setEscalatedAt(LocalDateTime.now());
+        ticket.setEscalationReason("Customer created a manual support ticket");
+        ticket.setAssignedAgent(findFirstAvailableAgent());
+
+        ticket = ticketRepository.save(ticket);
+
+        String acknowledgement = "Your support ticket has been created and routed to a human agent. Reference: #"
+                + ticket.getTicketId();
+
+        messageService.createMessage(
+                conversation,
+                null,
+                SenderType.SYSTEM,
+                acknowledgement,
+                Sentiment.NEUTRAL,
+                0.0);
+
+        ticket.setFirstResponseAt(LocalDateTime.now());
+        conversation.setStatus(ConversationStatus.ESCALATED);
+        ticket = ticketRepository.save(ticket);
+        conversationRepository.save(conversation);
+
+        if (ticket.getAssignedAgent() != null) {
+            notificationService.createTicketNotification(
+                    ticket.getAssignedAgent(),
+                    ticket,
+                    "A new support ticket has been assigned to you");
+        }
+
+        systemLogService.logTicketCreated(ticket);
+        return ticket;
     }
 
-    /**
-     * Creates or updates a support ticket.
-     *
-     * <p>
-     * The referenced conversation, customer, and optionally assigned
-     * support agent are verified before the ticket is persisted.
-     * </p>
-     *
-     * @param ticket ticket to be saved
-     * @return saved ticket
-     * @throws ResourceNotFoundException if referenced entities cannot be found
-     */
+    @Transactional(readOnly = true)
+    public List<Ticket> getCustomerTicketHistory(String customerEmail) {
+        User customer = requireCustomerByEmail(customerEmail);
+        return ticketRepository.findByCustomerUserIdOrderByCreatedAtDesc(customer.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TicketSummaryResponse> getMyTicketSummaries() {
+        User customer = requireCustomer(userService.currentUser());
+        return ticketRepository.findByCustomerUserIdOrderByCreatedAtDesc(customer.getUserId())
+                .stream()
+                .map(TicketSummaryResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long getMyTotalCount() {
+        User customer = requireCustomer(userService.currentUser());
+        return ticketRepository.countByCustomerUserId(customer.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public long getMyOpenCount() {
+        User customer = requireCustomer(userService.currentUser());
+        return ticketRepository.countByCustomerUserIdAndStatusIn(
+                customer.getUserId(),
+                Set.of(
+                        TicketStatus.OPEN,
+                        TicketStatus.ESCALATED,
+                        TicketStatus.IN_PROGRESS,
+                        TicketStatus.ON_HOLD));
+    }
+
+    @Transactional(readOnly = true)
+    public TicketDetailsResponse getCustomerTicketDetails(Long ticketId, String customerEmail) {
+        User customer = requireCustomerByEmail(customerEmail);
+        Ticket ticket = getTicketById(ticketId);
+        assertCustomerOwnsTicket(ticket, customer);
+        return details(ticket);
+    }
+
+    // Checks the current role and ticket ownership before returning full ticket details and messages.
+    @Transactional(readOnly = true)
+    public TicketDetailsResponse getAccessibleTicketDetails(Long ticketId) {
+        Ticket ticket = getTicketById(ticketId);
+        assertCanView(ticket, userService.currentUser());
+        return details(ticket);
+    }
+
+    @Transactional
     public Ticket saveTicket(Ticket ticket) {
+        if (ticket.getConversation() == null || ticket.getConversation().getConversationId() == null) {
+            throw new BadRequestException("Ticket conversation is required");
+        }
+        if (ticket.getCustomer() == null || ticket.getCustomer().getUserId() == null) {
+            throw new BadRequestException("Ticket customer is required");
+        }
 
-        Long conversationId =
-                ticket.getConversation()
-                        .getConversationId();
+        ticket.setConversation(getConversation(ticket.getConversation().getConversationId()));
+        ticket.setCustomer(userService.getUserById(ticket.getCustomer().getUserId()));
 
-        Conversation conversation =
-                conversationRepository
-                        .findById(conversationId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Conversation not found with ID: "
-                                                + conversationId));
+        if (ticket.getAssignedAgent() != null && ticket.getAssignedAgent().getUserId() != null) {
+            ticket.setAssignedAgent(userService.getUserById(ticket.getAssignedAgent().getUserId()));
+        }
 
-        ticket.setConversation(conversation);
-
-        Long customerId =
-                ticket.getCustomer()
-                        .getUserId();
-
-        User customer =
-                userRepository
-                        .findById(customerId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Customer not found with ID: "
-                                                + customerId));
-
-        ticket.setCustomer(customer);
-
-        if (ticket.getAssignedAgent() != null
-                && ticket.getAssignedAgent().getUserId() != null) {
-
-            Long assignedAgentId =
-                    ticket.getAssignedAgent()
-                            .getUserId();
-
-            User assignedAgent =
-                    userRepository
-                            .findById(assignedAgentId)
-                            .orElseThrow(() ->
-                                    new ResourceNotFoundException(
-                                            "Assigned agent not found with ID: "
-                                                    + assignedAgentId));
-
-            ticket.setAssignedAgent(assignedAgent);
+        if (ticket.getCategory() == null) {
+            ticket.setCategory(TicketCategory.GENERAL_INQUIRY);
+        }
+        if (ticket.getPriority() == null) {
+            ticket.setPriority(TicketPriority.MEDIUM);
+        }
+        if (ticket.getStatus() == null) {
+            ticket.setStatus(TicketStatus.OPEN);
         }
 
         return ticketRepository.save(ticket);
     }
 
-    /**
-     * Retrieves all support tickets.
-     *
-     * @return list containing all support tickets
-     */
+    @Transactional(readOnly = true)
     public List<Ticket> getAllTickets() {
-
         return ticketRepository.findAll();
     }
 
-    /**
-     * Retrieves a support ticket by its unique identifier.
-     *
-     * @param ticketId unique identifier of the ticket
-     * @return ticket associated with the specified identifier
-     * @throws ResourceNotFoundException if the ticket cannot be found
-     */
+    @Transactional(readOnly = true)
     public Ticket getTicketById(Long ticketId) {
-
-        return ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
+        return ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Ticket not found with ID: " + ticketId));
     }
 
-    /**
-     * Deletes a support ticket by its identifier.
-     *
-     * @param ticketId identifier of the ticket to delete
-     */
+    @Transactional
     public void deleteTicket(Long ticketId) {
-
+        getTicketById(ticketId);
         ticketRepository.deleteById(ticketId);
     }
 
-    /**
-     * Escalates an open support ticket for human assistance and
-     * notifies all active support agents.
-     *
-     * <p>
-     * Only a ticket currently in {@link TicketStatus#OPEN} status
-     * can be escalated. After successful escalation, the ticket is
-     * changed to {@link TicketStatus#ESCALATED} and persisted.
-     * </p>
-     *
-     * <p>
-     * The first escalation time is recorded using the
-     * {@code escalatedAt} lifecycle timestamp. This allows analytics
-     * to determine whether a ticket was historically escalated even
-     * after the ticket later moves to another status.
-     * </p>
-     *
-     * <p>
-     * Every active user with the {@link UserRole#SUPPORT_AGENT}
-     * role receives an unread notification informing them that
-     * the escalated ticket requires human assistance.
-     * </p>
-     *
-     * <p>
-     * This method is intended to be called by backend escalation
-     * workflows, including AI-based escalation decisions and
-     * business-rule-based escalation.
-     * </p>
-     *
-     * @param ticketId unique identifier of the ticket to escalate
-     * @return the escalated support ticket
-     * @throws ResourceNotFoundException if the ticket cannot be found
-     * @throws ForbiddenOperationException if the ticket is not open
+    /*
+     * Marks the ticket for human support and tries to assign an active agent automatically.
+     * The ticket can remain unassigned if there is no active agent available at the time.
      */
+    @Transactional
     public Ticket escalateTicket(Long ticketId) {
+        Ticket ticket = getTicketById(ticketId);
 
-        Ticket ticket = ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
-
-        if (ticket.getStatus() != TicketStatus.OPEN) {
-
-            throw new ForbiddenOperationException(
-                    "Only open tickets can be escalated");
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new ForbiddenOperationException("Closed tickets cannot be escalated");
         }
 
         ticket.setStatus(TicketStatus.ESCALATED);
-
-        /*
-         * Record the first time the ticket is escalated.
-         * The original timestamp is preserved for historical
-         * escalation-rate analytics.
-         */
         if (ticket.getEscalatedAt() == null) {
-
-            ticket.setEscalatedAt(
-                    LocalDateTime.now());
+            ticket.setEscalatedAt(LocalDateTime.now());
+        }
+        if (ticket.getEscalationReason() == null || ticket.getEscalationReason().isBlank()) {
+            ticket.setEscalationReason("Ticket escalated for human assistance");
+        }
+        if (ticket.getAssignedAgent() == null) {
+            ticket.setAssignedAgent(findFirstAvailableAgent());
         }
 
-        Ticket savedTicket =
-                ticketRepository.save(ticket);
-
-        /*
-         * Record successful ticket escalation for system auditing.
-         */
+        ticket.getConversation().setStatus(ConversationStatus.ESCALATED);
+        conversationRepository.save(ticket.getConversation());
+        Ticket savedTicket = ticketRepository.save(ticket);
         systemLogService.logTicketEscalated(savedTicket);
 
-        List<User> activeSupportAgents =
-                userRepository.findByRoleAndStatus(
-                        UserRole.SUPPORT_AGENT,
-                        UserStatus.ACTIVE);
-
-        for (User agent : activeSupportAgents) {
-
-            notificationService.createTicketNotification(
-                    agent,
-                    savedTicket,
-                    "New escalated ticket #"
-                            + savedTicket.getTicketId()
-                            + " requires human assistance.");
-        }
-
+        notifyActiveAgents(savedTicket, "New escalated ticket #" + savedTicket.getTicketId());
         return savedTicket;
     }
 
-    /**
-     * Retrieves all support tickets that have been escalated for
-     * human assistance.
-     *
-     * @return list of tickets with {@link TicketStatus#ESCALATED} status
-     */
+    @Transactional(readOnly = true)
     public List<Ticket> getEscalatedTickets() {
-
-        return ticketRepository
-                .findByStatusOrderByCreatedAtAsc(
-                        TicketStatus.ESCALATED);
+        return ticketRepository.findByStatusOrderByCreatedAtAsc(TicketStatus.ESCALATED);
     }
 
-    /**
-     * Assigns an escalated support ticket to the authenticated
-     * support agent.
-     *
-     * <p>
-     * The support agent is identified from JWT authentication.
-     * Only tickets with {@link TicketStatus#ESCALATED} status may
-     * be assigned.
-     * </p>
-     *
-     * <p>
-     * Following successful assignment, the ticket is moved to
-     * {@link TicketStatus#IN_PROGRESS} and the customer receives
-     * an unread notification informing them of the assignment.
-     * </p>
-     *
-     * @param ticketId unique identifier of the ticket to assign
-     * @param agentEmail email address of the authenticated support agent
-     * @return updated ticket containing the assigned support agent
-     * @throws ResourceNotFoundException if the agent or ticket cannot be found
-     * @throws ForbiddenOperationException if assignment is not permitted
-     */
-    public Ticket assignTicketToAgent(
-            Long ticketId,
-            String agentEmail) {
+    @Transactional(readOnly = true)
+    public List<TicketSummaryResponse> getStaffTickets() {
+        User current = userService.currentUser();
 
-        String normalizedEmail = agentEmail
-                .trim()
-                .toLowerCase();
-
-        User agent = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Support agent not found with email: "
-                                        + normalizedEmail));
-
-        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
-
-            throw new ForbiddenOperationException(
-                    "Only support agents can assign tickets");
+        if (current.getRole() == UserRole.ADMIN) {
+            return ticketRepository.findAll().stream()
+                    .map(TicketSummaryResponse::from)
+                    .toList();
         }
 
-        Ticket ticket = ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
-
-        if (ticket.getStatus() != TicketStatus.ESCALATED) {
-
-            throw new ForbiddenOperationException(
-                    "Only escalated tickets can be assigned");
+        if (current.getRole() != UserRole.AGENT) {
+            throw new ForbiddenOperationException("Staff access is required");
         }
 
+        return ticketRepository.findAll().stream()
+                .filter(ticket -> ticket.isEscalated()
+                        && (ticket.getAssignedAgent() == null
+                                || ticket.getAssignedAgent().getUserId().equals(current.getUserId())))
+                .map(TicketSummaryResponse::from)
+                .toList();
+    }
+
+    @Transactional
+    public Ticket assignTicketToAgent(Long ticketId, String agentEmail) {
+        User agent = requireSupportAgentByEmail(agentEmail);
+        return assignTicket(ticketId, agent, agent);
+    }
+
+    @Transactional
+    public TicketDetailsResponse assignTicketToSpecificAgent(Long ticketId, Long agentId) {
+        User current = userService.currentUser();
+        User agent = userService.getUserById(agentId);
+
+        if (agent.getRole() != UserRole.AGENT || agent.getStatus() != UserStatus.ACTIVE) {
+            throw new BadRequestException("The selected user is not an active support agent");
+        }
+
+        if (current.getRole() == UserRole.AGENT
+                && !current.getUserId().equals(agent.getUserId())) {
+            throw new ForbiddenOperationException("Support agents may only assign tickets to themselves");
+        }
+
+        if (current.getRole() == UserRole.CLIENT) {
+            throw new ForbiddenOperationException("Staff access is required");
+        }
+
+        return details(assignTicket(ticketId, agent, current));
+    }
+
+    // Confirms the selected user is an active agent before linking the agent to the ticket.
+    private Ticket assignTicket(Long ticketId, User agent, User actor) {
+        Ticket ticket = getTicketById(ticketId);
         ticket.setAssignedAgent(agent);
         ticket.setStatus(TicketStatus.IN_PROGRESS);
 
-        Ticket savedTicket =
-                ticketRepository.save(ticket);
+        if (ticket.getEscalatedAt() == null) {
+            ticket.setEscalatedAt(LocalDateTime.now());
+        }
 
+        Ticket savedTicket = ticketRepository.save(ticket);
         notificationService.createTicketNotification(
                 savedTicket.getCustomer(),
                 savedTicket,
                 "A support agent has been assigned to your ticket.");
-
+        systemLogService.logEvent(
+                "TICKET_ASSIGNED",
+                "Ticket assigned to " + agent.getName(),
+                actor,
+                savedTicket);
         return savedTicket;
     }
 
-    /**
-     * Updates the status and resolution information of a ticket
-     * assigned to the authenticated support agent.
-     *
-     * <p>
-     * Only the support agent currently assigned to the ticket is
-     * permitted to perform the update. Supported status changes include
-     * {@link TicketStatus#IN_PROGRESS},
-     * {@link TicketStatus#ON_HOLD},
-     * {@link TicketStatus#RESOLVED}, and
-     * {@link TicketStatus#CLOSED}.
-     * </p>
-     *
-     * <p>
-     * Resolution notes are required when a ticket is moved to
-     * {@link TicketStatus#RESOLVED} or {@link TicketStatus#CLOSED}.
-     * The first resolution time is recorded in {@code resolvedAt}
-     * for accurate resolution-time analytics.
-     * </p>
-     *
-     * <p>
-     * After the ticket is successfully updated, an unread notification
-     * is generated for the customer informing them of the status change.
-     * </p>
-     *
-     * @param ticketId unique identifier of the ticket
-     * @param request updated ticket status and resolution information
-     * @param agentEmail email address of the authenticated support agent
-     * @return updated support ticket
-     * @throws ResourceNotFoundException if the agent or ticket cannot be found
-     * @throws ForbiddenOperationException if the ticket cannot be updated
-     */
+    @Transactional
     public Ticket updateAssignedTicket(
             Long ticketId,
             AgentTicketUpdateRequest request,
             String agentEmail) {
 
-        String normalizedEmail = agentEmail
-                .trim()
-                .toLowerCase();
-
-        User agent = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Support agent not found with email: "
-                                        + normalizedEmail));
-
-        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
-
-            throw new ForbiddenOperationException(
-                    "Only support agents can update assigned tickets");
-        }
-
-        Ticket ticket = ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
+        User agent = requireSupportAgentByEmail(agentEmail);
+        Ticket ticket = getTicketById(ticketId);
 
         if (ticket.getAssignedAgent() == null
-                || !ticket.getAssignedAgent()
-                        .getUserId()
-                        .equals(agent.getUserId())) {
-
+                || !ticket.getAssignedAgent().getUserId().equals(agent.getUserId())) {
             throw new ForbiddenOperationException(
                     "Ticket is not assigned to the authenticated support agent");
         }
 
-        TicketStatus newStatus = request.getStatus();
-
-        if (newStatus != TicketStatus.IN_PROGRESS
-                && newStatus != TicketStatus.ON_HOLD
-                && newStatus != TicketStatus.RESOLVED
-                && newStatus != TicketStatus.CLOSED) {
-
-            throw new ForbiddenOperationException(
-                    "Support agent cannot change ticket to status: "
-                            + newStatus);
-        }
-
-        /*
-         * Resolution notes are mandatory when resolving
-         * or closing a support ticket.
-         */
-        if ((newStatus == TicketStatus.RESOLVED
-                || newStatus == TicketStatus.CLOSED)
-                && (request.getResolutionNotes() == null
-                || request.getResolutionNotes().isBlank())) {
-
-            throw new IllegalArgumentException(
-                    "Resolution notes are required when resolving or closing a ticket");
-        }
-
-        ticket.setStatus(newStatus);
-
-        if (request.getResolutionNotes() != null
-                && !request.getResolutionNotes().isBlank()) {
-
-            ticket.setResolutionNotes(
-                    request.getResolutionNotes().trim());
-        }
-
-        /*
-         * Record the first time the issue reaches a resolved
-         * or closed state. The timestamp is preserved if the
-         * ticket is later updated again.
-         */
-        if ((newStatus == TicketStatus.RESOLVED
-                || newStatus == TicketStatus.CLOSED)
-                && ticket.getResolvedAt() == null) {
-
-            ticket.setResolvedAt(
-                    LocalDateTime.now());
-        }
-
-        Ticket savedTicket =
-                ticketRepository.save(ticket);
-
-        /*
-         * Determines the customer notification message based on the
-         * newly updated ticket status.
-         */
-        String notificationMessage = switch (newStatus) {
-
-            case IN_PROGRESS ->
-                    "Your ticket is now being worked on.";
-
-            case ON_HOLD ->
-                    "Your ticket has been placed on hold.";
-
-            case RESOLVED ->
-                    "Your ticket has been resolved.";
-
-            case CLOSED ->
-                    "Your ticket has been closed.";
-
-            default -> null;
-        };
-
-        /*
-         * Generates an unread notification for the customer after
-         * the ticket status has been successfully updated.
-         */
-        if (notificationMessage != null) {
-
-            notificationService.createTicketNotification(
-                    savedTicket.getCustomer(),
-                    savedTicket,
-                    notificationMessage);
-        }
-
-        return savedTicket;
+        applyStaffStatus(ticket, request.getStatus(), request.getResolutionNotes(), agent);
+        return ticketRepository.save(ticket);
     }
 
-    /**
-     * Sends a response from the authenticated support agent to the
-     * conversation associated with an assigned support ticket.
-     *
-     * <p>
-     * The support agent is identified using the email address obtained
-     * from JWT authentication. Only the support agent currently assigned
-     * to the ticket is permitted to send a response.
-     * </p>
-     *
-     * <p>
-     * The response is stored as a new conversation message with
-     * {@link SenderType#SUPPORT_AGENT} as its sender type. After the
-     * message is successfully saved, the customer receives an unread
-     * notification informing them that a new support-agent response
-     * is available.
-     * </p>
-     *
-     * @param ticketId unique identifier of the support ticket
-     * @param request request containing the support agent's response
-     * @param agentEmail email address of the authenticated support agent
-     * @return newly created support-agent message
-     * @throws ResourceNotFoundException if the support agent or ticket
-     *         cannot be found
-     * @throws ForbiddenOperationException if the ticket is not assigned
-     *         to the authenticated support agent
-     */
+    @Transactional
+    public TicketDetailsResponse updateStatusByCurrentStaff(
+            Long ticketId,
+            TicketStatusRequest request) {
+
+        User current = userService.currentUser();
+        if (current.getRole() == UserRole.CLIENT) {
+            throw new ForbiddenOperationException("Only support staff can update ticket status");
+        }
+
+        Ticket ticket = getTicketById(ticketId);
+        assertCanView(ticket, current);
+        applyStaffStatus(ticket, request.getStatus(), request.getResolutionNotes(), current);
+        return details(ticketRepository.save(ticket));
+    }
+
+    // Updates resolved or closed timestamps when staff change the ticket status.
+    private void applyStaffStatus(
+            Ticket ticket,
+            TicketStatus status,
+            String resolutionNotes,
+            User actor) {
+
+        if (status == null) {
+            throw new BadRequestException("Ticket status is required");
+        }
+
+        if (resolutionNotes != null) {
+            ticket.setResolutionNotes(resolutionNotes.trim());
+        }
+
+        ticket.setStatus(status);
+
+        if (status == TicketStatus.RESOLVED || status == TicketStatus.RESOLVED_BY_AI) {
+            ticket.setResolvedAt(LocalDateTime.now());
+            ticket.getConversation().setStatus(ConversationStatus.COMPLETED);
+            ticket.getConversation().setEndedAt(LocalDateTime.now());
+            notificationService.createTicketNotification(
+                    ticket.getCustomer(),
+                    ticket,
+                    "Ticket #" + ticket.getTicketId() + " has been resolved");
+        } else if (status == TicketStatus.CLOSED) {
+            ticket.setClosedAt(LocalDateTime.now());
+            if (ticket.getResolvedAt() == null) {
+                ticket.setResolvedAt(LocalDateTime.now());
+            }
+            ticket.getConversation().setStatus(ConversationStatus.COMPLETED);
+            ticket.getConversation().setEndedAt(LocalDateTime.now());
+            notificationService.createTicketNotification(
+                    ticket.getCustomer(),
+                    ticket,
+                    "Ticket #" + ticket.getTicketId() + " has been closed");
+        }
+
+        conversationRepository.save(ticket.getConversation());
+        systemLogService.logEvent(
+                "TICKET_STATUS_UPDATED",
+                "Status changed to " + status,
+                actor,
+                ticket);
+    }
+
+    // Saves the agent reply to the conversation and records the first human response time when needed.
+    @Transactional
     public Message sendAgentResponse(
             Long ticketId,
             AgentMessageRequest request,
             String agentEmail) {
 
-        String normalizedEmail = agentEmail
-                .trim()
-                .toLowerCase();
-
-        User agent = userRepository
-                .findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Support agent not found with email: "
-                                        + normalizedEmail));
-
-        if (agent.getRole() != UserRole.SUPPORT_AGENT) {
-
-            throw new ForbiddenOperationException(
-                    "Only support agents can send ticket responses");
-        }
-
-        Ticket ticket = ticketRepository
-                .findById(ticketId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Ticket not found with ID: "
-                                        + ticketId));
+        User agent = requireSupportAgentByEmail(agentEmail);
+        Ticket ticket = getTicketById(ticketId);
 
         if (ticket.getAssignedAgent() == null
-                || !ticket.getAssignedAgent()
-                        .getUserId()
-                        .equals(agent.getUserId())) {
-
+                || !ticket.getAssignedAgent().getUserId().equals(agent.getUserId())) {
             throw new ForbiddenOperationException(
                     "Ticket is not assigned to the authenticated support agent");
         }
 
-        Message message = new Message();
+        Message message = messageService.createMessage(
+                ticket.getConversation(),
+                agent,
+                SenderType.AGENT,
+                request.getContent().trim(),
+                Sentiment.NEUTRAL,
+                0.0);
 
-        message.setConversation(ticket.getConversation());
-        message.setSenderUser(agent);
-        message.setSenderType(SenderType.SUPPORT_AGENT);
-        message.setContent(request.getContent().trim());
-        message.setSentimentScore(null);
+        if (ticket.getFirstResponseAt() == null) {
+            ticket.setFirstResponseAt(LocalDateTime.now());
+        }
+        if (ticket.getStatus() == TicketStatus.ESCALATED || ticket.getStatus() == TicketStatus.OPEN) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+        }
 
-        Message savedMessage =
-                messageRepository.save(message);
-
-        /*
-         * Notifies the customer that a support agent has sent
-         * a new response regarding the ticket.
-         */
+        ticketRepository.save(ticket);
         notificationService.createTicketNotification(
                 ticket.getCustomer(),
                 ticket,
-                "You have received a new response from a support agent.");
+                "A support agent replied to ticket #" + ticket.getTicketId());
+        systemLogService.logEvent("AGENT_MESSAGE_SENT", "Support agent replied to ticket", agent, ticket);
+        return message;
+    }
 
-        return savedMessage;
+    /*
+     * Saves a new ticket message only after checking customer ownership or staff access.
+     * The sender type is set from the logged-in user's role before the message is stored.
+     */
+    @Transactional
+    public TicketDetailsResponse addManualMessage(Long ticketId, TicketMessageRequest request) {
+        String text = request.text();
+        if (text == null || text.isBlank()) {
+            throw new BadRequestException("message is required");
+        }
+
+        Ticket ticket = getTicketById(ticketId);
+        User current = userService.currentUser();
+        assertCanView(ticket, current);
+
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new BadRequestException("This ticket is closed");
+        }
+
+        SenderType senderType = current.getRole() == UserRole.CLIENT
+                ? SenderType.CLIENT
+                : SenderType.AGENT;
+
+        messageService.createMessage(
+                ticket.getConversation(),
+                current,
+                senderType,
+                text.trim(),
+                Sentiment.NEUTRAL,
+                0.0);
+
+        if (senderType == SenderType.AGENT) {
+            if (ticket.getAssignedAgent() == null) {
+                ticket.setAssignedAgent(current);
+            }
+            if (ticket.getStatus() == TicketStatus.ESCALATED || ticket.getStatus() == TicketStatus.OPEN) {
+                ticket.setStatus(TicketStatus.IN_PROGRESS);
+            }
+            if (ticket.getFirstResponseAt() == null) {
+                ticket.setFirstResponseAt(LocalDateTime.now());
+            }
+            notificationService.createTicketNotification(
+                    ticket.getCustomer(),
+                    ticket,
+                    "A support agent replied to ticket #" + ticket.getTicketId());
+        } else {
+            if (ticket.getStatus() == TicketStatus.RESOLVED_BY_AI || ticket.getStatus() == TicketStatus.RESOLVED) {
+                ticket.setStatus(TicketStatus.ESCALATED);
+                ticket.setEscalatedAt(LocalDateTime.now());
+                ticket.setResolvedAt(null);
+                ticket.setEscalationReason("Customer added a follow-up message after resolution");
+                if (ticket.getAssignedAgent() == null) {
+                    ticket.setAssignedAgent(findFirstAvailableAgent());
+                }
+            }
+            if (ticket.getAssignedAgent() != null) {
+                notificationService.createTicketNotification(
+                        ticket.getAssignedAgent(),
+                        ticket,
+                        "Customer replied to ticket #" + ticket.getTicketId());
+            }
+        }
+
+        ticketRepository.save(ticket);
+        systemLogService.logEvent(
+                "TICKET_MESSAGE_ADDED",
+                senderType + " message added",
+                current,
+                ticket);
+        return details(ticket);
+    }
+
+    // Creates the ticket using the classification, priority, sentiment and confidence returned by AI.
+    private Ticket createAiTicket(
+            Conversation conversation,
+            User customer,
+            String title,
+            AiResult result) {
+
+        Ticket ticket = new Ticket();
+        ticket.setConversation(conversation);
+        ticket.setCustomer(customer);
+        ticket.setTitle(title);
+        applyAiResult(ticket, result);
+        return ticketRepository.save(ticket);
+    }
+
+    // Refreshes the existing ticket with the latest AI classification and escalation result.
+    private void applyAiResult(Ticket ticket, AiResult result) {
+        ticket.setCategory(result.category());
+        ticket.setPriority(result.priority());
+        ticket.setSentiment(result.sentiment());
+        ticket.setSentimentScore(result.sentimentScore());
+        ticket.setAiConfidenceScore(result.confidence());
+
+        if (result.escalated()) {
+            ticket.setStatus(TicketStatus.ESCALATED);
+            if (ticket.getEscalatedAt() == null) {
+                ticket.setEscalatedAt(LocalDateTime.now());
+            }
+            ticket.setEscalationReason(String.join("; ", result.escalationReasons()));
+            if (ticket.getAssignedAgent() == null) {
+                ticket.setAssignedAgent(findFirstAvailableAgent());
+            }
+        } else if (!ticket.isEscalated()) {
+            ticket.setStatus(TicketStatus.RESOLVED_BY_AI);
+            ticket.setResolvedAt(LocalDateTime.now());
+        }
+    }
+
+    /*
+     * Records the AI decision in the system log for traceability.
+     * When human review is required, agent notifications are created as part of the same workflow.
+     */
+    private void afterAiProcessing(Ticket ticket, AiResult result) {
+        if (ticket.isEscalated() && ticket.getAssignedAgent() != null) {
+            notificationService.createTicketNotification(
+                    ticket.getAssignedAgent(),
+                    ticket,
+                    "AI escalated ticket #" + ticket.getTicketId());
+        }
+
+        systemLogService.logEvent(
+                ticket.isEscalated() ? "TICKET_ESCALATED" : "TICKET_RESOLVED_BY_AI",
+                result.knowledgeBaseMatch()
+                        ? "Knowledge base response used by AI"
+                        : "AI response generated",
+                ticket.getCustomer(),
+                ticket);
+    }
+
+    private ChatResponse chatResponse(Ticket ticket, AiResult result) {
+        AiAnalysisResponse analysis = new AiAnalysisResponse(
+                result.category(),
+                result.priority(),
+                result.sentiment(),
+                result.sentimentScore(),
+                result.confidence(),
+                result.escalated(),
+                result.escalationReasons(),
+                result.knowledgeBaseMatch());
+
+        return new ChatResponse(
+                result.reply(),
+                TicketSummaryResponse.from(ticket),
+                analysis);
+    }
+
+    private TicketDetailsResponse details(Ticket ticket) {
+        List<Message> messages = messageService.getConversationMessages(
+                ticket.getConversation().getConversationId());
+        return TicketDetailsResponse.from(ticket, messages);
+    }
+
+    private void finishConversationFromTicket(Conversation conversation, Ticket ticket) {
+        if (ticket.getStatus() == TicketStatus.RESOLVED_BY_AI
+                || ticket.getStatus() == TicketStatus.RESOLVED
+                || ticket.getStatus() == TicketStatus.CLOSED) {
+            conversation.setStatus(ConversationStatus.COMPLETED);
+            conversation.setEndedAt(LocalDateTime.now());
+        } else if (ticket.isEscalated()) {
+            conversation.setStatus(ConversationStatus.ESCALATED);
+        }
+    }
+
+    private Conversation createConversation(User customer) {
+        Conversation conversation = new Conversation();
+        conversation.setCustomer(customer);
+        conversation.setStatus(ConversationStatus.ACTIVE);
+        return conversationRepository.save(conversation);
+    }
+
+    private Conversation getConversation(Long conversationId) {
+        return conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Conversation not found with ID: " + conversationId));
+    }
+
+    private User requireCustomerByEmail(String email) {
+        User customer = userRepository.findByEmailIgnoreCase(email.trim().toLowerCase())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Customer not found with email: " + email));
+        return requireCustomer(customer);
+    }
+
+    private User requireCustomer(User user) {
+        if (user.getRole() != UserRole.CLIENT) {
+            throw new ForbiddenOperationException("Customer access is required");
+        }
+        return user;
+    }
+
+    private User requireSupportAgentByEmail(String email) {
+        User agent = userRepository.findByEmailIgnoreCase(email.trim().toLowerCase())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Support agent not found with email: " + email));
+
+        if (agent.getRole() != UserRole.AGENT || agent.getStatus() != UserStatus.ACTIVE) {
+            throw new ForbiddenOperationException("Active support-agent access is required");
+        }
+        return agent;
+    }
+
+    private void assertCustomerOwnsConversation(Conversation conversation, User customer) {
+        if (!conversation.getCustomer().getUserId().equals(customer.getUserId())) {
+            throw new ForbiddenOperationException(
+                    "Conversation does not belong to the authenticated customer");
+        }
+    }
+
+    private void assertCustomerOwnsTicket(Ticket ticket, User customer) {
+        if (!ticket.getCustomer().getUserId().equals(customer.getUserId())) {
+            throw new ForbiddenOperationException(
+                    "Ticket does not belong to the authenticated customer");
+        }
+    }
+
+    // Allows customers to access only their own tickets while staff can access tickets for support work.
+    private void assertCanView(Ticket ticket, User current) {
+        if (current.getRole() == UserRole.ADMIN) {
+            return;
+        }
+        if (current.getRole() == UserRole.CLIENT
+                && ticket.getCustomer().getUserId().equals(current.getUserId())) {
+            return;
+        }
+        if (current.getRole() == UserRole.AGENT
+                && (ticket.getAssignedAgent() == null
+                        || ticket.getAssignedAgent().getUserId().equals(current.getUserId()))) {
+            return;
+        }
+        throw new ForbiddenOperationException("You do not have access to this ticket");
+    }
+
+    // Uses the first active agent returned by the user service for automatic assignment.
+    private User findFirstAvailableAgent() {
+        return userRepository.findFirstByRoleAndStatusOrderByUserIdAsc(
+                        UserRole.AGENT,
+                        UserStatus.ACTIVE)
+                .orElse(null);
+    }
+
+    private void notifyActiveAgents(Ticket ticket, String message) {
+        for (User agent : userRepository.findByRoleAndStatusOrderByNameAsc(
+                UserRole.AGENT,
+                UserStatus.ACTIVE)) {
+            notificationService.createTicketNotification(agent, ticket, message);
+        }
+    }
+
+    private String defaultTitle(String title, String fallback) {
+        if (title == null || title.isBlank()) {
+            return fallback;
+        }
+        String clean = title.trim();
+        return clean.length() <= 180 ? clean : clean.substring(0, 180);
+    }
+
+    private String titleFrom(String message) {
+        String clean = message.trim().replaceAll("\\s+", " ");
+        return clean.length() <= 70 ? clean : clean.substring(0, 67) + "...";
+    }
+
+    private TicketCategory defaultCategory(TicketCategory category) {
+        return category == null ? TicketCategory.GENERAL_INQUIRY : category;
+    }
+
+    private TicketPriority defaultPriority(TicketPriority priority) {
+        return priority == null ? TicketPriority.MEDIUM : priority;
+    }
+
+    private TicketPriority higherPriority(TicketPriority current, TicketPriority next) {
+        if (current == null) {
+            return next;
+        }
+        return next.ordinal() > current.ordinal() ? next : current;
     }
 }
