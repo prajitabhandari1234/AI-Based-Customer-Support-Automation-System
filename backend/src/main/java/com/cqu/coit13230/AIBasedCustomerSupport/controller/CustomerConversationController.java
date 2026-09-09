@@ -11,18 +11,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.Conversation;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.ConversationService;
 
 /**
- * REST controller responsible for customer-specific conversation operations.
- *
- * <p>
- * Customers can create new support conversations using their authenticated
- * identity. The customer identity is obtained from the JWT rather than being
- * supplied by the client.
- * </p>
- *
- * <p>
- * Access to these endpoints is restricted to users with the CUSTOMER role
- * through the application's security configuration.
- * </p>
+ * Handles conversation creation for logged-in customers.
+ * It creates conversations using the identity of the logged-in customer.
  */
 @RestController
 @RequestMapping("/api/customer/conversations")
@@ -30,33 +20,13 @@ public class CustomerConversationController {
 
     private final ConversationService conversationService;
 
-    /**
-     * Constructs the customer conversation controller.
-     *
-     * @param conversationService service used to manage conversations
-     */
-    public CustomerConversationController(
-            ConversationService conversationService) {
-
+    public CustomerConversationController(ConversationService conversationService) {
         this.conversationService = conversationService;
     }
 
-    /**
-     * Creates a new conversation for the authenticated customer.
-     *
-     * @param authentication current authenticated user information
-     * @return newly created customer conversation
-     */
     @PostMapping
-    public ResponseEntity<Conversation> createConversation(
-            Authentication authentication) {
-
-        Conversation conversation =
-                conversationService.createCustomerConversation(
-                        authentication.getName());
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(conversation);
+    public ResponseEntity<Conversation> createConversation(Authentication authentication) {
+        Conversation conversation = conversationService.createCustomerConversation(authentication.getName());
+        return ResponseEntity.status(HttpStatus.CREATED).body(conversation);
     }
 }

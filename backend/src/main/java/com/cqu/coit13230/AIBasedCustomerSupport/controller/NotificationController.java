@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -13,66 +14,46 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Notification;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.NotificationService;
+import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
 
 import jakarta.validation.Valid;
 
 /**
- * REST controller responsible for handling HTTP requests related to
- * {@link Notification} entities.
- *
- * <p>
- * Provides API endpoints for creating, retrieving, updating,
- * and deleting notifications through the {@link NotificationService}.
- * </p>
+ * Handles notification listing, reading and deletion endpoints.
+ * It provides the common notification actions used by the frontend notification panel.
  */
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final UserService userService;
 
-    /**
-     * Constructs a new {@code NotificationController} with the required
-     * notification service.
-     *
-     * @param notificationService service used to manage notification operations
-     */
-    public NotificationController(NotificationService notificationService) {
+    public NotificationController(
+            NotificationService notificationService,
+            UserService userService) {
+
         this.notificationService = notificationService;
+        this.userService = userService;
     }
 
-    /**
-     * Retrieves all notifications.
-     *
-     * @return a list of all notifications
-     */
     @GetMapping
-    public List<Notification> getAllNotifications() {
-        return notificationService.getAllNotifications();
+    public List<Notification> getNotifications() {
+        if (userService.currentUser().getRole() == UserRole.ADMIN) {
+            return notificationService.getAllNotifications();
+        }
+        return notificationService.getCurrentUserNotifications();
     }
 
-    /**
-     * Retrieves a notification by identifier.
-     *
-     * @param notificationId the identifier of the notification
-     * @return the requested notification, or HTTP 404 if not found
-     */
     @GetMapping("/{notificationId}")
     public ResponseEntity<Notification> getNotificationById(
             @PathVariable Long notificationId) {
 
-        return notificationService.getNotificationById(notificationId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        return ResponseEntity.ok(notificationService.getNotificationById(notificationId));
     }
 
-    /**
-     * Creates a new notification.
-     *
-     * @param notification the notification to create
-     * @return the created notification
-     */
     @PostMapping
     public Notification createNotification(
             @Valid @RequestBody Notification notification) {
@@ -80,45 +61,25 @@ public class NotificationController {
         return notificationService.saveNotification(notification);
     }
 
-    /**
-     * Updates an existing notification.
-     *
-     * @param notificationId the identifier of the notification to update
-     * @param notification the updated notification information
-     * @return the updated notification, or HTTP 404 if not found
-     */
     @PutMapping("/{notificationId}")
     public ResponseEntity<Notification> updateNotification(
             @PathVariable Long notificationId,
             @Valid @RequestBody Notification notification) {
 
-        return notificationService.getNotificationById(notificationId)
-                .map(existingNotification -> {
-
-                    notification.setNotificationId(notificationId);
-
-                    return ResponseEntity.ok(
-                            notificationService.saveNotification(notification));
-                })
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        notificationService.getNotificationById(notificationId);
+        notification.setNotificationId(notificationId);
+        return ResponseEntity.ok(notificationService.saveNotification(notification));
     }
 
-    /**
-     * Deletes a notification by identifier.
-     *
-     * @param notificationId the identifier of the notification to delete
-     * @return HTTP 204 if deleted, or HTTP 404 if not found
-     */
+    @PatchMapping("/{notificationId}/read")
+    public ResponseEntity<Notification> markRead(@PathVariable Long notificationId) {
+        return ResponseEntity.ok(
+                notificationService.markCurrentUserNotificationAsRead(notificationId));
+    }
+
     @DeleteMapping("/{notificationId}")
-    public ResponseEntity<Void> deleteNotification(
-            @PathVariable Long notificationId) {
-
-        if (notificationService.getNotificationById(notificationId).isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
+    public ResponseEntity<Void> deleteNotification(@PathVariable Long notificationId) {
         notificationService.deleteNotification(notificationId);
-
         return ResponseEntity.noContent().build();
     }
 }

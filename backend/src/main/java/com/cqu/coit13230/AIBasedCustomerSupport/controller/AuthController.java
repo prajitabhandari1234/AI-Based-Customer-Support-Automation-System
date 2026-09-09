@@ -2,6 +2,7 @@ package com.cqu.coit13230.AIBasedCustomerSupport.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,14 +17,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
 import jakarta.validation.Valid;
 
 /**
- * REST controller responsible for authentication-related operations
- * within the AI-Based Customer Support Automation System.
- *
- * <p>
- * Provides public API endpoints for customer registration and
- * user authentication. JWT-based authentication will be integrated
- * separately as part of the security implementation.
- * </p>
+ * Handles user registration, login and current-user requests.
+ * Keeps the authentication routes separate from the main user management endpoints.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -31,59 +26,35 @@ public class AuthController {
 
     private final UserService userService;
 
-    /**
-     * Constructs a new {@code AuthController} with the required
-     * user service.
-     *
-     * @param userService service used to manage user registration
-     *                    and authentication
-     */
     public AuthController(UserService userService) {
         this.userService = userService;
     }
 
-    /**
-     * Registers a new customer account.
-     *
-     * <p>
-     * The registration request is validated before processing.
-     * The backend automatically assigns the CUSTOMER role and ACTIVE
-     * account status. The supplied password is securely hashed before
-     * the user is stored in the database.
-     * </p>
-     *
-     * @param request registration information supplied by the customer
-     * @return the newly registered customer account
-     */
+    // Registers the customer and immediately returns a login response so they can continue without a second request.
     @PostMapping("/register")
-    public ResponseEntity<User> registerUser(
+    public ResponseEntity<LoginResponse> registerUser(
             @Valid @RequestBody RegisterRequest request) {
 
-        User registeredUser = userService.registerUser(request);
+        userService.registerUser(request);
+
+        LoginRequest loginRequest = new LoginRequest(
+                request.getEmail(),
+                request.getPassword());
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(registeredUser);
+                .body(userService.authenticateUser(loginRequest));
     }
 
-    /**
-     * Authenticates a user using their email address and password.
-     *
-     * <p>
-     * The supplied credentials are validated before authentication.
-     * If authentication succeeds, safe account information is returned.
-     * Password information is never included in the response.
-     * </p>
-     *
-     * @param request login credentials supplied by the user
-     * @return information about the authenticated user
-     */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> loginUser(
             @Valid @RequestBody LoginRequest request) {
 
-        LoginResponse response = userService.authenticateUser(request);
+        return ResponseEntity.ok(userService.authenticateUser(request));
+    }
 
-        return ResponseEntity.ok(response);
+    @GetMapping("/me")
+    public ResponseEntity<User> getCurrentUser() {
+        return ResponseEntity.ok(userService.currentUser());
     }
 }

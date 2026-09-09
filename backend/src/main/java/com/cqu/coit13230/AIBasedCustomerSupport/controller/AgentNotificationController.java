@@ -14,88 +14,32 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.Notification;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.NotificationService;
 
 /**
- * REST controller responsible for support-agent notification operations.
- *
- * <p>
- * Endpoints provided by this controller allow authenticated support
- * agents to retrieve their notifications and mark individual
- * notifications as read.
- * </p>
- *
- * <p>
- * The identity of the support agent is obtained from JWT
- * authentication rather than being supplied directly by the client.
- * This prevents support agents from accessing or modifying
- * notifications belonging to other users.
- * </p>
+ * Handles notification endpoints used by support agents.
+ * The logged-in agent identity is used when loading notification data.
  */
 @RestController
 @RequestMapping("/api/agent/notifications")
 public class AgentNotificationController {
 
-    /**
-     * Service used to manage notification-related operations.
-     */
     private final NotificationService notificationService;
 
-    /**
-     * Constructs a new {@code AgentNotificationController}.
-     *
-     * @param notificationService service used to manage notifications
-     */
-    public AgentNotificationController(
-            NotificationService notificationService) {
-
+    public AgentNotificationController(NotificationService notificationService) {
         this.notificationService = notificationService;
     }
 
-    /**
-     * Retrieves all notifications belonging to the authenticated
-     * support agent.
-     *
-     * <p>
-     * Notifications are returned from newest to oldest and may include
-     * events such as newly escalated support tickets that require
-     * human assistance.
-     * </p>
-     *
-     * @param authentication authentication information obtained from JWT
-     * @return notifications belonging to the authenticated support agent
-     */
     @GetMapping
     public ResponseEntity<List<Notification>> getAgentNotifications(
             Authentication authentication) {
 
-        List<Notification> notifications =
-                notificationService.getAgentNotifications(
-                        authentication.getName());
-
-        return ResponseEntity.ok(notifications);
+        return ResponseEntity.ok(
+                notificationService.getNotificationsForEmail(authentication.getName()));
     }
 
-    /**
-     * Marks a notification belonging to the authenticated support
-     * agent as read.
-     *
-     * <p>
-     * Notification ownership is validated by the service layer before
-     * the notification is updated.
-     * </p>
-     *
-     * @param notificationId unique identifier of the notification
-     * @param authentication authentication information obtained from JWT
-     * @return updated notification marked as read
-     */
     @PutMapping("/{notificationId}/read")
     public ResponseEntity<Notification> markNotificationAsRead(
-            @PathVariable Long notificationId,
-            Authentication authentication) {
+            @PathVariable Long notificationId) {
 
-        Notification notification =
-                notificationService.markAgentNotificationAsRead(
-                        notificationId,
-                        authentication.getName());
-
-        return ResponseEntity.ok(notification);
+        return ResponseEntity.ok(
+                notificationService.markCurrentUserNotificationAsRead(notificationId));
     }
 }

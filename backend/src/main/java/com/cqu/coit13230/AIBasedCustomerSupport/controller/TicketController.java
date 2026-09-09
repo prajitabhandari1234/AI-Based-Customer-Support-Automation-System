@@ -1,7 +1,9 @@
 package com.cqu.coit13230.AIBasedCustomerSupport.controller;
 
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,129 +14,111 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.CreateTicketRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketDetailsResponse;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketMessageRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.TicketSummaryResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.Ticket;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
+import com.cqu.coit13230.AIBasedCustomerSupport.model.UserRole;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.TicketService;
+import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import jakarta.validation.Valid;
 
 /**
- * REST controller responsible for handling HTTP requests related to
- * {@link Ticket} entities.
- *
- * <p>
- * Provides API endpoints for creating, retrieving, updating,
- * and deleting customer support tickets through the {@link TicketService}.
- * </p>
+ * Handles general ticket endpoints shared across user roles.
+ * It contains the shared ticket operations that are not limited to one user role.
  */
 @RestController
 @RequestMapping("/api/tickets")
 public class TicketController {
 
     private final TicketService ticketService;
+    private final UserService userService;
+    private final ObjectMapper objectMapper;
 
-    /**
-     * Constructs a new {@code TicketController} with the required
-     * ticket service.
-     *
-     * @param ticketService service used to manage ticket operations
-     */
-    public TicketController(TicketService ticketService) {
+    public TicketController(
+            TicketService ticketService,
+            UserService userService,
+            ObjectMapper objectMapper) {
+
         this.ticketService = ticketService;
+        this.userService = userService;
+        this.objectMapper = objectMapper;
     }
 
-    /**
-     * Retrieves all tickets.
-     *
-     * @return a list of all tickets
-     */
     @GetMapping
     public List<Ticket> getAllTickets() {
         return ticketService.getAllTickets();
     }
 
-    /**
-     * Retrieves a ticket by identifier.
-     *
-     * @param ticketId the identifier of the ticket
-     * @return the requested ticket
-     */
-    @GetMapping("/{ticketId}")
-    public ResponseEntity<Ticket> getTicketById(
-            @PathVariable Long ticketId) {
-
-        return ResponseEntity.ok(
-                ticketService.getTicketById(ticketId));
+    @GetMapping("/my")
+    public List<TicketSummaryResponse> getMyTickets() {
+        return ticketService.getMyTicketSummaries();
     }
 
-    /**
-     * Creates a new ticket.
-     *
-     * @param ticket the ticket to create
-     * @return the created ticket
+    @GetMapping("/my/summary")
+    public Map<String, Long> getMyTicketSummary() {
+        return Map.of(
+                "total", ticketService.getMyTotalCount(),
+                "open", ticketService.getMyOpenCount());
+    }
+
+    @GetMapping("/{ticketId}")
+    public ResponseEntity<TicketDetailsResponse> getTicketById(@PathVariable Long ticketId) {
+        return ResponseEntity.ok(ticketService.getAccessibleTicketDetails(ticketId));
+    }
+
+    /*
+     * Supports both manual ticket data and chat-style message requests.
+     * This keeps older frontend requests working while the newer chat flow can use the same endpoint.
      */
     @PostMapping
-    public Ticket createTicket(
-            @Valid @RequestBody Ticket ticket) {
+    public ResponseEntity<?> createTicket(@RequestBody JsonNode body) {
+        User current = userService.currentUser();
 
-        return ticketService.saveTicket(ticket);
+        if (current.getRole() == UserRole.CLIENT) {
+            CreateTicketRequest request = objectMapper.convertValue(body, CreateTicketRequest.class);
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(ticketService.createManualTicket(request));
+        }
+
+        Ticket ticket = objectMapper.convertValue(body, Ticket.class);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ticketService.saveTicket(ticket));
     }
 
-    /**
-     * Updates an existing ticket.
-     *
-     * @param ticketId the identifier of the ticket to update
-     * @param ticket the updated ticket information
-     * @return the updated ticket
-     */
     @PutMapping("/{ticketId}")
     public ResponseEntity<Ticket> updateTicket(
             @PathVariable Long ticketId,
             @Valid @RequestBody Ticket ticket) {
 
         ticketService.getTicketById(ticketId);
-
         ticket.setTicketId(ticketId);
-
-        return ResponseEntity.ok(
-                ticketService.saveTicket(ticket));
+        return ResponseEntity.ok(ticketService.saveTicket(ticket));
     }
 
-    /**
-     * Deletes a ticket by identifier.
-     *
-     * @param ticketId the identifier of the ticket to delete
-     * @return HTTP 204 if successfully deleted
-     */
     @DeleteMapping("/{ticketId}")
-    public ResponseEntity<Void> deleteTicket(
-            @PathVariable Long ticketId) {
-
-        ticketService.getTicketById(ticketId);
-
+    public ResponseEntity<Void> deleteTicket(@PathVariable Long ticketId) {
         ticketService.deleteTicket(ticketId);
-
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Escalates an open support ticket for human assistance.
-     *
-     * <p>
-     * This operation is restricted to administrators through the
-     * application's security configuration. The actual escalation
-     * business logic is handled by {@link TicketService}.
-     * </p>
-     *
-     * @param ticketId identifier of the ticket to escalate
-     * @return the escalated support ticket
-     */
     @PutMapping("/{ticketId}/escalate")
-    public ResponseEntity<Ticket> escalateTicket(
-            @PathVariable Long ticketId) {
+    public ResponseEntity<Ticket> escalateTicket(@PathVariable Long ticketId) {
+        return ResponseEntity.ok(ticketService.escalateTicket(ticketId));
+    }
 
-        Ticket escalatedTicket =
-                ticketService.escalateTicket(ticketId);
+    @PostMapping("/{ticketId}/messages")
+    public ResponseEntity<TicketDetailsResponse> addMessage(
+            @PathVariable Long ticketId,
+            @RequestBody TicketMessageRequest request) {
 
-        return ResponseEntity.ok(escalatedTicket);
+        return ResponseEntity.ok(ticketService.addManualMessage(ticketId, request));
     }
 }

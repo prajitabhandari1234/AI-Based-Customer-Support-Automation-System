@@ -20,15 +20,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.service.TicketService;
 import jakarta.validation.Valid;
 
 /**
- * REST controller responsible for customer-specific support ticket
- * operations.
- *
- * <p>
- * Endpoints provided by this controller are intended for authenticated
- * users with the {@code CUSTOMER} role. Customer identity is obtained
- * from the authenticated JWT rather than being supplied directly in
- * request data.
- * </p>
+ * Handles ticket endpoints for logged-in customers.
+ * These routes only work with tickets belonging to the logged-in customer.
  */
 @RestController
 @RequestMapping("/api/customer/tickets")
@@ -36,93 +29,31 @@ public class CustomerTicketController {
 
     private final TicketService ticketService;
 
-    /**
-     * Constructs a new {@code CustomerTicketController}.
-     *
-     * @param ticketService service used to manage support tickets
-     */
-    public CustomerTicketController(
-            TicketService ticketService) {
-
+    public CustomerTicketController(TicketService ticketService) {
         this.ticketService = ticketService;
     }
 
-    /**
-     * Creates a support ticket for the authenticated customer.
-     *
-     * <p>
-     * The authenticated customer's email address is obtained from the
-     * Spring Security authentication context. The service verifies that
-     * the supplied conversation belongs to the customer before creating
-     * the ticket.
-     * </p>
-     *
-     * @param request information required to create the ticket
-     * @param authentication authentication information obtained from the JWT
-     * @return newly created support ticket
-     */
     @PostMapping
     public ResponseEntity<Ticket> createTicket(
             @Valid @RequestBody CreateTicketRequest request,
             Authentication authentication) {
 
-        Ticket createdTicket =
-                ticketService.createCustomerTicket(
-                        request,
-                        authentication.getName());
-
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(createdTicket);
+                .body(ticketService.createCustomerTicket(request, authentication.getName()));
     }
 
-    /**
-     * Retrieves the support ticket history of the authenticated customer.
-     *
-     * <p>
-     * Customer identity is obtained from the authenticated JWT rather
-     * than from a request parameter. This prevents customers from
-     * retrieving ticket history belonging to another user.
-     * </p>
-     *
-     * @param authentication authentication information obtained from the JWT
-     * @return list of tickets belonging to the authenticated customer
-     */
     @GetMapping
-    public ResponseEntity<List<Ticket>> getTicketHistory(
-            Authentication authentication) {
-
-        List<Ticket> tickets =
-                ticketService.getCustomerTicketHistory(
-                        authentication.getName());
-
-        return ResponseEntity.ok(tickets);
+    public ResponseEntity<List<Ticket>> getTicketHistory(Authentication authentication) {
+        return ResponseEntity.ok(ticketService.getCustomerTicketHistory(authentication.getName()));
     }
 
-    /**
-     * Retrieves a specific support ticket together with its associated
-     * conversation message history.
-     *
-     * <p>
-     * The backend verifies that the ticket belongs to the authenticated
-     * customer before returning ticket information or conversation
-     * messages.
-     * </p>
-     *
-     * @param ticketId unique identifier of the requested ticket
-     * @param authentication authentication information obtained from the JWT
-     * @return ticket details and associated conversation history
-     */
     @GetMapping("/{ticketId}")
     public ResponseEntity<TicketDetailsResponse> getTicketDetails(
             @PathVariable Long ticketId,
             Authentication authentication) {
 
-        TicketDetailsResponse response =
-                ticketService.getCustomerTicketDetails(
-                        ticketId,
-                        authentication.getName());
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ticketService.getCustomerTicketDetails(ticketId, authentication.getName()));
     }
 }

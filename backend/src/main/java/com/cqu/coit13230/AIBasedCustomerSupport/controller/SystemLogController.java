@@ -12,25 +12,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.model.SystemLog;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.SystemLogService;
 
 /**
- * REST controller responsible for administrator access to
- * {@link SystemLog} records.
- *
- * <p>
- * System logs provide an audit trail of important application
- * activity including authentication attempts, ticket creation,
- * ticket escalation, and AI-related events.
- * </p>
- *
- * <p>
- * Audit records are read-only through the REST API. Log entries
- * are created automatically by backend services and cannot be
- * manually created, updated, or deleted through this controller.
- * </p>
- *
- * <p>
- * Access to these endpoints is restricted to administrators
- * through the application's security configuration.
- * </p>
+ * Provides admin access to stored system logs.
+ * This gives admins a simple API view of application activity records.
  */
 @RestController
 @RequestMapping("/api/system-logs")
@@ -38,42 +21,17 @@ public class SystemLogController {
 
     private final SystemLogService systemLogService;
 
-    /**
-     * Constructs the system-log controller.
-     *
-     * @param systemLogService service used to retrieve system logs
-     */
-    public SystemLogController(
-            SystemLogService systemLogService) {
-
+    public SystemLogController(SystemLogService systemLogService) {
         this.systemLogService = systemLogService;
     }
 
-    /**
-     * Retrieves all system log records.
-     *
-     * @return list containing all system log records
-     */
     @GetMapping
-    public List<SystemLog> getAllSystemLogs() {
-
-        return systemLogService.getAllSystemLogs();
+    public ResponseEntity<List<SystemLog>> getAllSystemLogs() {
+        return ResponseEntity.ok(systemLogService.getAllSystemLogs());
     }
 
-    /**
-     * Retrieves a system log record by identifier.
-     *
-     * @param systemLogId identifier of the requested system log
-     * @return requested system log or HTTP 404 when not found
-     */
     @GetMapping("/{systemLogId}")
-    public ResponseEntity<SystemLog> getSystemLogById(
-            @PathVariable Long systemLogId) {
-
-        return systemLogService
-                .getSystemLogById(systemLogId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() ->
-                        ResponseEntity.notFound().build());
+    public ResponseEntity<SystemLog> getSystemLogById(@PathVariable Long systemLogId) {
+        return ResponseEntity.ok(systemLogService.getSystemLogById(systemLogId));
     }
 }
