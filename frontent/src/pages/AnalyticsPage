@@ -1,1 +1,71 @@
+import { useEffect, useState } from 'react'
+import { analyticsApi } from '../api/client'
+import Loader from '../components/Loader'
+import SimpleChart from '../components/SimpleChart'
+import StatCard from '../components/StatCard'
+
+function chartData(map = {}) {
+  return { labels: Object.keys(map).map((key) => key.replaceAll('_', ' ')), values: Object.values(map) }
+}
+
+export default function AnalyticsPage() {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    analyticsApi.summary().then(setData).catch((err) => setError(err.message))
+  }, [])
+
+  if (!data && !error) return <Loader label="Calculating support analytics…" />
+  if (error) return <div className="alert alert-error">{error}</div>
+
+  const daily = chartData(data.dailyTicketVolume)
+  const category = chartData(data.ticketsByCategory)
+  const sentiment = chartData(data.sentimentDistribution)
+  const status = chartData(data.ticketsByStatus)
+
+  return (
+    <>
+      <section className="page-heading">
+        <p className="eyebrow">Real-time analytics</p>
+        <h1>Customer support performance</h1>
+        <p>Operational metrics derived from ticket activity, AI outcomes, escalation decisions, and customer sentiment.</p>
+      </section>
+
+      <section className="stats-grid">
+        <StatCard label="Total tickets" value={data.totalTickets} helper={`${data.openTickets} currently open`} icon="▣" />
+        <StatCard label="Escalation rate" value={`${data.escalationRate}%`} helper={`${data.escalatedTickets} human reviews`} icon="↗" />
+        <StatCard label="AI success rate" value={`${data.chatbotSuccessRate}%`} helper="Resolved by automation" icon="✦" />
+        <StatCard label="Avg. first response" value={`${data.averageFirstResponseSeconds}s`} helper="Target: under 3 seconds" icon="◷" />
+      </section>
+
+      <section className="analytics-grid">
+        <article className="panel chart-panel wide">
+          <div className="panel-header"><div><p className="eyebrow">Volume trend</p><h2>Tickets created in the last 7 days</h2></div></div>
+          <SimpleChart type="line" labels={daily.labels} values={daily.values} label="Tickets" />
+        </article>
+        <article className="panel chart-panel">
+          <div className="panel-header"><div><p className="eyebrow">Classification</p><h2>Tickets by category</h2></div></div>
+          <SimpleChart type="bar" labels={category.labels} values={category.values} label="Tickets" />
+        </article>
+        <article className="panel chart-panel">
+          <div className="panel-header"><div><p className="eyebrow">Customer mood</p><h2>Sentiment distribution</h2></div></div>
+          <SimpleChart type="doughnut" labels={sentiment.labels} values={sentiment.values} label="Messages" />
+        </article>
+        <article className="panel chart-panel">
+          <div className="panel-header"><div><p className="eyebrow">Workflow</p><h2>Tickets by status</h2></div></div>
+          <SimpleChart type="bar" labels={status.labels} values={status.values} label="Tickets" />
+        </article>
+        <article className="panel metric-summary">
+          <p className="eyebrow">Service efficiency</p>
+          <h2>Resolution summary</h2>
+          <div className="large-metric"><strong>{data.resolvedTickets}</strong><span>resolved tickets</span></div>
+          <div className="large-metric"><strong>{data.averageResolutionMinutes} min</strong><span>average resolution time</span></div>
+          <p className="muted">Prototype metrics are calculated from the current database and update whenever tickets change.</p>
+        </article>
+      </section>
+    </>
+  )
+}
+
 
