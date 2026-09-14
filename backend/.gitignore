@@ -1,0 +1,18 @@
+# Secrets / environment files stay outside Git, while the example file remains available for setup.
+.env
+.env.*
+!.env.example
+
+# Maven build output is generated locally and should not be committed.
+/target/
+
+# Local H2 database files are runtime data rather than source files.
+/data/
+*.mv.db
+*.trace.db
+
+# IDE settings and operating-system metadata are ignored to keep the repository clean.
+.vscode/
+.idea/
+*.iml
+.DS_Store

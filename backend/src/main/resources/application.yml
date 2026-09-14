@@ -1,0 +1,56 @@
+# Main application settings. Most values can be overridden from .env for local or deployed environments.
+spring:
+  application:
+    name: ai-customer-support
+
+  config:
+    import: "optional:file:.env[.properties]"
+
+  profiles:
+    active: ${APP_DB_MODE:h2}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${SHOW_SQL:false}
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: ${H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: ${SERVER_ERROR_INCLUDE_MESSAGE:always}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_ENDPOINTS:health,info}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-development-secret-to-at-least-64-characters-before-production-123456789}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+
+  # AI provider settings choose local rules or OpenAI and define the external request timeouts.
+  ai:
+    provider: ${AI_PROVIDER:local}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-5.6-luna}
+      endpoint: ${OPENAI_ENDPOINT:https://api.openai.com/v1/responses}
+      connect-timeout-seconds: ${OPENAI_CONNECT_TIMEOUT_SECONDS:8}
+      request-timeout-seconds: ${OPENAI_REQUEST_TIMEOUT_SECONDS:25}
+
+  seed:
+    enabled: ${SEED_DATA:false}
