@@ -21,91 +21,131 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Handles ticket analysis, AI replies and escalation decisions.
- * It can use OpenAI first and falls back to local rules when an external result is unavailable.
+ * Provides AI-based analysis and automated response generation for
+ * customer-support messages.
+ *
+ * <p>
+ * This service analyses incoming customer messages to determine ticket
+ * category, priority, sentiment, confidence, escalation requirements,
+ * and an appropriate support response.
+ * </p>
+ *
+ * <p>
+ * When OpenAI is configured as the AI provider, the service attempts
+ * to use the external AI service first. If an external result is not
+ * available, local analysis rules and knowledge-base matching are used
+ * as a fallback.
+ * </p>
  */
 @Service
 public class AiService {
 
+    /**
+     * Words used by the local sentiment analyser as indicators of
+     * negative customer sentiment.
+     */
     private static final Set<String> NEGATIVE_WORDS = Set.of(
             "angry", "annoyed", "bad", "broken", "complaint", "disappointed",
             "failure", "frustrated", "furious", "hate", "horrible", "late",
             "never", "poor", "ridiculous", "scam", "terrible", "unacceptable",
             "unhappy", "useless", "worst", "wrong", "refund", "urgent");
 
+    /**
+     * Words used by the local sentiment analyser as indicators of
+     * positive customer sentiment.
+     */
     private static final Set<String> POSITIVE_WORDS = Set.of(
             "amazing", "awesome", "excellent", "good", "great", "happy",
             "helpful", "love", "perfect", "pleased", "satisfied", "thanks",
             "thank", "wonderful");
 
-    private static final String OUT_OF_SCOPE_REPLY =
-        "I can only assist with customer-support-related questions. "
-                + "Please ask me about our products, services, your account, orders, payments, "
-                + "refunds, technical issues, or support requests.";
+    /**
+     * Standard response returned when a message is identified as being
+     * outside the supported customer-service scope.
+     */
+    private static final String OUT_OF_SCOPE_REPLY = "I can only assist with customer-support-related questions. "
+            + "Please ask me about our products, services, your account, orders, payments, "
+            + "refunds, technical issues, or support requests.";
 
+    /**
+     * Phrases used to identify requests that are outside the supported
+     * customer-service domain.
+     */
     private static final List<String> OUT_OF_SCOPE_PHRASES = List.of(
-        "write code",
-        "write a code",
-        "python code",
-        "java code",
-        "javascript code",
-        "programming assignment",
-        "homework",
-        "write an essay",
-        "write essay",
-        "project report",
-        "research report",
-        "write a report",
-        "write report",
-        "write a poem",
-        "write poem",
-        "write a story",
-        "write story",
-        "give me a recipe",
-        "solve this equation",
-        "capital of");
+            "write code",
+            "write a code",
+            "python code",
+            "java code",
+            "javascript code",
+            "programming assignment",
+            "homework",
+            "write an essay",
+            "write essay",
+            "project report",
+            "research report",
+            "write a report",
+            "write report",
+            "write a poem",
+            "write poem",
+            "write a story",
+            "write story",
+            "give me a recipe",
+            "solve this equation",
+            "capital of");
 
+    /**
+     * Phrases used to identify messages containing customer-support
+     * related context.
+     */
     private static final List<String> SUPPORT_SCOPE_PHRASES = List.of(
-        "account",
-        "login",
-        "password",
-        "order",
-        "delivery",
-        "shipment",
-        "tracking",
-        "payment",
-        "billing",
-        "invoice",
-        "charged",
-        "refund",
-        "return",
-        "product",
-        "service",
-        "support",
-        "ticket",
-        "complaint",
-        "error",
-        "not working",
-        "issue",
-        "problem",
-        "agent",
-        "human",
-        "subscription",
-        "cancel",
-        "website",
-        "app");
+            "account",
+            "login",
+            "password",
+            "order",
+            "delivery",
+            "shipment",
+            "tracking",
+            "payment",
+            "billing",
+            "invoice",
+            "charged",
+            "refund",
+            "return",
+            "product",
+            "service",
+            "support",
+            "ticket",
+            "complaint",
+            "error",
+            "not working",
+            "issue",
+            "problem",
+            "agent",
+            "human",
+            "subscription",
+            "cancel",
+            "website",
+            "app");
 
+    /**
+     * Greetings and short support requests accepted as valid starting
+     * messages for customer-support conversations.
+     */
     private static final Set<String> SUPPORT_GREETINGS = Set.of(
-        "hi",
-        "hello",
-        "hey",
-        "help",
-        "help me",
-        "can you help me",
-        "good morning",
-        "good afternoon",
-        "good evening");
+            "hi",
+            "hello",
+            "hey",
+            "help",
+            "help me",
+            "can you help me",
+            "good morning",
+            "good afternoon",
+            "good evening");
 
+    /**
+     * Maps ticket categories to keywords used by the local
+     * classification process.
+     */
     private static final Map<TicketCategory, Set<String>> CATEGORY_WORDS = Map.of(
             TicketCategory.BILLING, Set.of("bill", "billing", "charge", "invoice", "payment", "price"),
             TicketCategory.TECHNICAL, Set.of("bug", "crash", "error", "failed", "not working", "broken"),
@@ -114,11 +154,36 @@ public class AiService {
             TicketCategory.ORDER_STATUS, Set.of("order", "delivery", "tracking", "shipment", "arrive"),
             TicketCategory.PRODUCT_INFORMATION, Set.of("product", "feature", "specification", "available", "stock"));
 
+    /**
+     * Repository used to retrieve knowledge-base entries.
+     */
     private final KnowledgeBaseEntryRepository knowledgeBaseRepository;
+
+    /**
+     * Service used to communicate with OpenAI.
+     */
     private final OpenAiService openAiService;
+
+    /**
+     * Object mapper used to process structured JSON responses.
+     */
     private final ObjectMapper objectMapper;
+
+    /**
+     * Configured AI provider used by the application.
+     */
     private final String aiProvider;
 
+    /**
+     * Creates an AI service with the required knowledge-base repository,
+     * OpenAI service, JSON mapper, and configured AI provider.
+     *
+     * @param knowledgeBaseRepository repository used to access knowledge-base
+     *                                entries
+     * @param openAiService           service used to communicate with OpenAI
+     * @param objectMapper            mapper used to process JSON responses
+     * @param aiProvider              configured AI provider
+     */
     public AiService(
             KnowledgeBaseEntryRepository knowledgeBaseRepository,
             OpenAiService openAiService,
@@ -131,9 +196,18 @@ public class AiService {
         this.aiProvider = aiProvider;
     }
 
-    /*
-     * OpenAI is used as the main analyser when it is configured.
-     * If it cannot be used, the same request is handled by the local rules instead.
+    /**
+     * Analyses a customer message and produces the AI result required
+     * by the ticket workflow.
+     *
+     * <p>
+     * OpenAI is used as the primary analyser when configured. If it
+     * cannot provide a usable result, the same message is processed
+     * using the local analysis rules.
+     * </p>
+     *
+     * @param message customer message to analyse
+     * @return result containing the generated reply and ticket analysis
      */
     public AiResult analyse(String message) {
         KnowledgeMatch match = findBestKnowledgeMatch(message).orElse(null);
@@ -147,9 +221,18 @@ public class AiService {
         return localAnalysis(message, match);
     }
 
-    /*
-     * Builds one structured prompt for classification, sentiment, priority and reply generation.
-     * Asking for JSON makes the response easier to map back into the ticket workflow.
+    /**
+     * Attempts to analyse a customer message using OpenAI.
+     *
+     * <p>
+     * A structured prompt is created for scope detection, classification,
+     * sentiment analysis, priority determination, escalation decisions,
+     * and reply generation.
+     * </p>
+     *
+     * @param message customer message to analyse
+     * @param match   matching knowledge-base entry, or {@code null} if none exists
+     * @return optional AI result when OpenAI produces a usable response
      */
     private Optional<AiResult> analyseWithOpenAi(String message, KnowledgeMatch match) {
         if (!openAiService.isConfigured()) {
@@ -243,9 +326,13 @@ public class AiService {
                 .flatMap(text -> parseOpenAiResult(text, match != null));
     }
 
-    /*
-     * Converts the OpenAI JSON result into the fields expected by AiAnalysisResponse.
-     * Default values are kept for any optional result that is missing or invalid.
+    /**
+     * Converts an OpenAI JSON response into the fields required by the
+     * application's AI result.
+     *
+     * @param text               JSON response returned by OpenAI
+     * @param knowledgeBaseMatch indicates whether a knowledge-base match was found
+     * @return optional parsed AI result
      */
     private Optional<AiResult> parseOpenAiResult(String text, boolean knowledgeBaseMatch) {
         try {
@@ -307,7 +394,14 @@ public class AiService {
         }
     }
 
-    // Uses the local keyword and knowledge-base rules when OpenAI is unavailable or disabled.
+    /**
+     * Performs local message analysis when OpenAI is unavailable,
+     * disabled, or does not return a usable result.
+     *
+     * @param message customer message to analyse
+     * @param match   matching knowledge-base entry, or {@code null} if none exists
+     * @return locally generated AI result
+     */
     private AiResult localAnalysis(String message, KnowledgeMatch match) {
 
         if (!isLikelySupportRelated(message)) {
@@ -339,7 +433,13 @@ public class AiService {
                 "");
     }
 
-    // Estimates sentiment by comparing the positive and negative words found in the message.
+    /**
+     * Estimates customer sentiment by comparing positive and negative
+     * words found within the supplied message.
+     *
+     * @param text customer message to analyse
+     * @return detected sentiment and sentiment score
+     */
     private SentimentResult analyseSentiment(String text) {
         if (text == null || text.isBlank()) {
             return new SentimentResult(Sentiment.NEUTRAL, 0);
@@ -374,7 +474,13 @@ public class AiService {
         return new SentimentResult(sentiment, round(score));
     }
 
-    // Counts keyword matches for each support category and uses the strongest match.
+    /**
+     * Classifies a customer message by counting keyword matches for
+     * each supported ticket category.
+     *
+     * @param message customer message to classify
+     * @return category with the strongest keyword match
+     */
     private TicketCategory classify(String message) {
         String lower = message == null ? "" : message.toLowerCase(Locale.ROOT);
         TicketCategory bestCategory = TicketCategory.GENERAL_INQUIRY;
@@ -391,7 +497,15 @@ public class AiService {
         return bestCategory;
     }
 
-    // Raises the ticket priority when urgent wording or a strongly negative message is detected.
+    /**
+     * Determines ticket priority using message content, ticket category,
+     * and calculated sentiment.
+     *
+     * @param message        customer message being analysed
+     * @param category       detected ticket category
+     * @param sentimentScore calculated sentiment score
+     * @return calculated ticket priority
+     */
     private TicketPriority priority(String message, TicketCategory category, double sentimentScore) {
         String lower = message == null ? "" : message.toLowerCase(Locale.ROOT);
         boolean critical = List.of("security breach", "data leak", "fraud", "emergency", "critical")
@@ -412,9 +526,15 @@ public class AiService {
         return TicketPriority.MEDIUM;
     }
 
-    /*
-     * Builds a short list of escalation reasons such as low confidence, urgent wording or negative sentiment.
-     * The list is also used to explain why the ticket was sent to a human agent.
+    /**
+     * Builds the reasons requiring a ticket to be escalated to a human
+     * support agent.
+     *
+     * @param message        customer message being analysed
+     * @param sentimentScore calculated sentiment score
+     * @param priority       calculated ticket priority
+     * @param confidence     AI confidence score
+     * @return immutable list of escalation reasons
      */
     private List<String> escalationReasons(
             String message,
@@ -446,7 +566,14 @@ public class AiService {
         return List.copyOf(reasons);
     }
 
-    // Keeps unrelated requests blocked when OpenAI is unavailable.
+    /**
+     * Determines whether a message is likely to be related to
+     * customer support.
+     *
+     * @param message customer message to evaluate
+     * @return {@code true} when the message is considered support-related;
+     *         otherwise {@code false}
+     */
     private boolean isLikelySupportRelated(String message) {
 
         if (message == null || message.isBlank()) {
@@ -458,27 +585,30 @@ public class AiService {
                 .trim()
                 .replaceAll("\\s+", " ");
 
-        // Reject obvious general-purpose requests first.
         if (OUT_OF_SCOPE_PHRASES.stream().anyMatch(lower::contains)) {
             return false;
         }
 
-        // Normal greetings are allowed to start a support conversation.
         if (SUPPORT_GREETINGS.contains(lower)) {
             return true;
         }
 
-        // Other messages need some clear customer-support context.
         return SUPPORT_SCOPE_PHRASES.stream()
                 .anyMatch(lower::contains);
     }
 
+    /**
+     * Creates the standard result returned for a message that is
+     * outside the customer-support scope.
+     *
+     * @param reason reason the message was considered out of scope
+     * @return standard out-of-scope AI result
+     */
     private AiResult outOfScopeResult(String reason) {
 
-        String safeReason =
-                reason == null || reason.isBlank()
-                        ? "The message is outside the customer-support scope."
-                        : reason;
+        String safeReason = reason == null || reason.isBlank()
+                ? "The message is outside the customer-support scope."
+                : reason;
 
         return new AiResult(
                 OUT_OF_SCOPE_REPLY,
@@ -494,6 +624,16 @@ public class AiService {
                 safeReason);
     }
 
+    /**
+     * Generates a local support response using the detected category,
+     * knowledge-base match, and escalation status.
+     *
+     * @param category  detected ticket category
+     * @param match     matching knowledge-base entry, or {@code null} if none
+     *                  exists
+     * @param escalated indicates whether the ticket has been escalated
+     * @return generated support response
+     */
     private String localReply(TicketCategory category, KnowledgeMatch match, boolean escalated) {
         String reply;
 
@@ -501,13 +641,20 @@ public class AiService {
             reply = match.entry().getAnswerTemplate();
         } else {
             reply = switch (category) {
-                case ACCOUNT -> "I can help with account access. Please tell me whether you need login help, an email update, or password-reset guidance.";
-                case BILLING -> "I can help with billing. Please provide the invoice or transaction reference without sharing full card details.";
-                case REFUND -> "I can help with your refund request. Please provide the order number and a short reason for the return.";
-                case ORDER_STATUS -> "Please provide your order number so the delivery or tracking status can be checked.";
-                case TECHNICAL -> "Please share the error message, device or browser, and the steps that caused the technical problem.";
-                case PRODUCT_INFORMATION -> "Please tell me which product or feature you are asking about so I can provide the relevant information.";
-                case GENERAL_INQUIRY -> "Thank you for contacting support. I have reviewed your message and will help with the next appropriate step.";
+                case ACCOUNT ->
+                    "I can help with account access. Please tell me whether you need login help, an email update, or password-reset guidance.";
+                case BILLING ->
+                    "I can help with billing. Please provide the invoice or transaction reference without sharing full card details.";
+                case REFUND ->
+                    "I can help with your refund request. Please provide the order number and a short reason for the return.";
+                case ORDER_STATUS ->
+                    "Please provide your order number so the delivery or tracking status can be checked.";
+                case TECHNICAL ->
+                    "Please share the error message, device or browser, and the steps that caused the technical problem.";
+                case PRODUCT_INFORMATION ->
+                    "Please tell me which product or feature you are asking about so I can provide the relevant information.";
+                case GENERAL_INQUIRY ->
+                    "Thank you for contacting support. I have reviewed your message and will help with the next appropriate step.";
             };
         }
 
@@ -518,7 +665,14 @@ public class AiService {
         return reply;
     }
 
-    // Compares active knowledge-base questions and keeps the entry with the best word overlap.
+    /**
+     * Finds the active knowledge-base entry with the strongest word
+     * overlap with the supplied customer message.
+     *
+     * @param message customer message used for knowledge-base matching
+     * @return optional best knowledge-base match when the required
+     *         matching threshold is reached
+     */
     private Optional<KnowledgeMatch> findBestKnowledgeMatch(String message) {
         Set<String> messageWords = words(message);
         if (messageWords.isEmpty()) {
@@ -528,7 +682,8 @@ public class AiService {
         KnowledgeMatch best = null;
         String lowerMessage = message.toLowerCase(Locale.ROOT);
 
-        for (KnowledgeBaseEntry entry : knowledgeBaseRepository.findByActiveTrueOrderByCategoryAscQuestionPatternAsc()) {
+        for (KnowledgeBaseEntry entry : knowledgeBaseRepository
+                .findByActiveTrueOrderByCategoryAscQuestionPatternAsc()) {
             Set<String> patternWords = words(entry.getQuestionPattern());
             if (patternWords.isEmpty()) {
                 continue;
@@ -554,6 +709,13 @@ public class AiService {
                 : Optional.empty();
     }
 
+    /**
+     * Extracts significant words from text for use during
+     * knowledge-base matching.
+     *
+     * @param text text from which words are extracted
+     * @return set of significant words
+     */
     private Set<String> words(String text) {
         if (text == null) {
             return Set.of();
@@ -564,13 +726,20 @@ public class AiService {
                 "can", "how", "what", "are", "was", "were", "have", "has");
 
         return Arrays.stream(text.toLowerCase(Locale.ROOT)
-                        .replaceAll("[^a-z0-9 ]", " ")
-                        .split("\\s+"))
+                .replaceAll("[^a-z0-9 ]", " ")
+                .split("\\s+"))
                 .filter(word -> word.length() > 2)
                 .filter(word -> !ignored.contains(word))
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Converts a category string into a supported ticket category.
+     *
+     * @param category category value to convert
+     * @return matching category or {@link TicketCategory#GENERAL_INQUIRY}
+     *         when conversion fails
+     */
     private TicketCategory parseCategory(String category) {
         try {
             return TicketCategory.valueOf(category.trim().toUpperCase(Locale.ROOT));
@@ -579,6 +748,16 @@ public class AiService {
         }
     }
 
+    /**
+     * Converts a textual value into a specified enum type and returns
+     * the supplied fallback value when conversion fails.
+     *
+     * @param <T>      enum type
+     * @param type     enum class
+     * @param value    textual value to convert
+     * @param fallback fallback enum value
+     * @return converted enum value or the fallback value
+     */
     private <T extends Enum<T>> T enumValue(
             Class<T> type,
             String value,
@@ -591,6 +770,12 @@ public class AiService {
         }
     }
 
+    /**
+     * Extracts the JSON object contained within an AI response.
+     *
+     * @param text text containing the expected JSON response
+     * @return extracted JSON text
+     */
     private String extractJson(String text) {
         String cleaned = text.trim();
         int start = cleaned.indexOf('{');
@@ -603,14 +788,45 @@ public class AiService {
         return cleaned;
     }
 
+    /**
+     * Restricts a numeric value to the supplied minimum and maximum.
+     *
+     * @param value   value to constrain
+     * @param minimum minimum permitted value
+     * @param maximum maximum permitted value
+     * @return constrained value
+     */
     private double clamp(double value, double minimum, double maximum) {
         return Math.max(minimum, Math.min(maximum, value));
     }
 
+    /**
+     * Rounds a numeric value to two decimal places.
+     *
+     * @param value value to round
+     * @return value rounded to two decimal places
+     */
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
 
+    /**
+     * Represents the complete result of AI analysis for a
+     * customer-support message.
+     *
+     * @param reply              generated support response
+     * @param category           detected ticket category
+     * @param priority           detected ticket priority
+     * @param sentiment          detected customer sentiment
+     * @param sentimentScore     calculated sentiment score
+     * @param confidence         calculated AI confidence
+     * @param escalated          indicates whether escalation is required
+     * @param escalationReasons  reasons for escalation
+     * @param knowledgeBaseMatch indicates whether a knowledge-base match was found
+     * @param inScope            indicates whether the message is within support
+     *                           scope
+     * @param scopeReason        reason for the scope classification
+     */
     public record AiResult(
             String reply,
             TicketCategory category,
@@ -625,9 +841,21 @@ public class AiService {
             String scopeReason) {
     }
 
+    /**
+     * Represents the result of local sentiment analysis.
+     *
+     * @param sentiment detected sentiment
+     * @param score     calculated sentiment score
+     */
     private record SentimentResult(Sentiment sentiment, double score) {
     }
 
+    /**
+     * Represents a knowledge-base entry and its calculated matching score.
+     *
+     * @param entry matched knowledge-base entry
+     * @param score calculated matching score
+     */
     private record KnowledgeMatch(KnowledgeBaseEntry entry, double score) {
     }
 }

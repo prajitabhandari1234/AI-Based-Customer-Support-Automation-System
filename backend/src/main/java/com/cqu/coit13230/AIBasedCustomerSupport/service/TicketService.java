@@ -37,21 +37,55 @@ import com.cqu.coit13230.AIBasedCustomerSupport.repository.UserRepository;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.AiService.AiResult;
 
 /**
- * Handles ticket, chat, assignment and escalation workflows.
- * Most ticket state changes, access checks and customer/agent message flows are handled here.
+ * Provides the core business logic for ticket and customer-chat workflows.
+ *
+ * <p>
+ * This service manages ticket creation, AI-assisted customer conversations,
+ * ticket escalation, support-agent assignment, ticket status updates,
+ * customer and agent messages, notifications, system logging, and
+ * role-based ticket access.
+ * </p>
  */
 @Service
 public class TicketService {
 
+    /** Repository used to persist and retrieve support tickets. */
     private final TicketRepository ticketRepository;
+
+    /** Repository used to persist and retrieve customer conversations. */
     private final ConversationRepository conversationRepository;
+
+    /** Repository used to retrieve users required by ticket workflows. */
     private final UserRepository userRepository;
+
+    /** Service used to access and validate application users. */
     private final UserService userService;
+
+    /** Service used to create and retrieve conversation messages. */
     private final MessageService messageService;
+
+    /** Service used to create ticket-related notifications. */
     private final NotificationService notificationService;
+
+    /** Service used to record important ticket and AI events. */
     private final SystemLogService systemLogService;
+
+    /** Service used to analyse customer messages using AI. */
     private final AiService aiService;
 
+    /**
+     * Creates a ticket service with all dependencies required for ticket,
+     * conversation, messaging, notification, logging, and AI workflows.
+     *
+     * @param ticketRepository       repository used to access tickets
+     * @param conversationRepository repository used to access conversations
+     * @param userRepository         repository used to access users
+     * @param userService            service used for authenticated user operations
+     * @param messageService         service used for message operations
+     * @param notificationService    service used for notification operations
+     * @param systemLogService       service used for system logging
+     * @param aiService              service used for AI analysis
+     */
     public TicketService(
             TicketRepository ticketRepository,
             ConversationRepository conversationRepository,
@@ -72,9 +106,19 @@ public class TicketService {
         this.aiService = aiService;
     }
 
-    /*
-     * Starts a new customer conversation and stores the first message before running AI analysis.
-     * A ticket is then created from the analysis and linked back to the conversation.
+    /**
+     * Starts a new AI-assisted customer-support chat.
+     *
+     * <p>
+     * The customer message is analysed before a support conversation or
+     * ticket is created. Messages outside the customer-support scope are
+     * rejected without creating persistent support records. Valid messages
+     * create a conversation, customer message, AI-generated ticket, and
+     * AI response.
+     * </p>
+     *
+     * @param customerMessage initial customer message
+     * @return chat response containing the AI reply and ticket information
      */
     @Transactional
     public ChatResponse startChat(String customerMessage) {
@@ -82,7 +126,6 @@ public class TicketService {
 
         AiResult result = aiService.analyse(customerMessage);
 
-        // Reject unrelated requests before creating a support conversation or ticket.
         if (!result.inScope()) {
             return new ChatResponse(
                     result.reply(),
@@ -123,9 +166,19 @@ public class TicketService {
         return chatResponse(ticket, result);
     }
 
-    /*
-     * Continues an existing chat by saving the customer message and running AI analysis again.
-     * The latest AI values are copied onto the same ticket so its state stays up to date.
+    /**
+     * Continues an existing AI-assisted customer-support conversation.
+     *
+     * <p>
+     * The customer message is analysed and, when it is within support
+     * scope, stored in the existing conversation. The ticket is then
+     * refreshed using the latest AI classification, sentiment, priority,
+     * confidence, and escalation information.
+     * </p>
+     *
+     * @param ticketId        identifier of the ticket being continued
+     * @param customerMessage new customer message
+     * @return updated chat response
      */
     @Transactional
     public ChatResponse continueChat(Long ticketId, String customerMessage) {
@@ -191,6 +244,13 @@ public class TicketService {
         return chatResponse(ticket, result);
     }
 
+    /**
+     * Creates a ticket for a customer identified by email.
+     *
+     * @param request       ticket creation request
+     * @param customerEmail authenticated customer's email address
+     * @return created ticket
+     */
     @Transactional
     public Ticket createCustomerTicket(CreateTicketRequest request, String customerEmail) {
         User customer = requireCustomerByEmail(customerEmail);
@@ -218,6 +278,12 @@ public class TicketService {
         return savedTicket;
     }
 
+    /**
+     * Creates a manual support ticket for the currently authenticated customer.
+     *
+     * @param request ticket creation request
+     * @return complete details of the created ticket
+     */
     @Transactional
     public TicketDetailsResponse createManualTicket(CreateTicketRequest request) {
         User customer = requireCustomer(userService.currentUser());
@@ -225,7 +291,20 @@ public class TicketService {
         return details(ticket);
     }
 
-    // Creates a customer ticket without an AI chat flow and sends it directly to human support.
+    /**
+     * Creates a manual customer-support ticket and routes it to human support.
+     *
+     * <p>
+     * The customer message is analysed, persisted in the conversation,
+     * and used to populate ticket classification information. The ticket
+     * is immediately escalated and an available support agent is assigned
+     * when one exists.
+     * </p>
+     *
+     * @param request  ticket creation request
+     * @param customer customer creating the ticket
+     * @return created ticket
+     */
     private Ticket createManualTicket(CreateTicketRequest request, User customer) {
         if (request.getMessage() == null || request.getMessage().isBlank()) {
             throw new BadRequestException("message is required for a manual ticket");
@@ -296,12 +375,23 @@ public class TicketService {
         return ticket;
     }
 
+    /**
+     * Retrieves ticket history for the specified customer.
+     *
+     * @param customerEmail customer's email address
+     * @return customer tickets ordered according to the repository query
+     */
     @Transactional(readOnly = true)
     public List<Ticket> getCustomerTicketHistory(String customerEmail) {
         User customer = requireCustomerByEmail(customerEmail);
         return ticketRepository.findByCustomerUserIdOrderByCreatedAtDesc(customer.getUserId());
     }
 
+    /**
+     * Retrieves ticket summaries belonging to the currently authenticated customer.
+     *
+     * @return list of customer ticket summaries
+     */
     @Transactional(readOnly = true)
     public List<TicketSummaryResponse> getMyTicketSummaries() {
         User customer = requireCustomer(userService.currentUser());
@@ -311,12 +401,22 @@ public class TicketService {
                 .toList();
     }
 
+    /**
+     * Counts all tickets belonging to the currently authenticated customer.
+     *
+     * @return total customer ticket count
+     */
     @Transactional(readOnly = true)
     public long getMyTotalCount() {
         User customer = requireCustomer(userService.currentUser());
         return ticketRepository.countByCustomerUserId(customer.getUserId());
     }
 
+    /**
+     * Counts active tickets belonging to the currently authenticated customer.
+     *
+     * @return number of open, escalated, in-progress, or on-hold tickets
+     */
     @Transactional(readOnly = true)
     public long getMyOpenCount() {
         User customer = requireCustomer(userService.currentUser());
@@ -329,6 +429,13 @@ public class TicketService {
                         TicketStatus.ON_HOLD));
     }
 
+    /**
+     * Retrieves ticket details after verifying customer ownership.
+     *
+     * @param ticketId      ticket identifier
+     * @param customerEmail customer's email address
+     * @return complete ticket details
+     */
     @Transactional(readOnly = true)
     public TicketDetailsResponse getCustomerTicketDetails(Long ticketId, String customerEmail) {
         User customer = requireCustomerByEmail(customerEmail);
@@ -337,7 +444,13 @@ public class TicketService {
         return details(ticket);
     }
 
-    // Checks the current role and ticket ownership before returning full ticket details and messages.
+    /**
+     * Retrieves complete ticket details after validating access for the
+     * currently authenticated user.
+     *
+     * @param ticketId ticket identifier
+     * @return complete ticket details
+     */
     @Transactional(readOnly = true)
     public TicketDetailsResponse getAccessibleTicketDetails(Long ticketId) {
         Ticket ticket = getTicketById(ticketId);
@@ -345,6 +458,12 @@ public class TicketService {
         return details(ticket);
     }
 
+    /**
+     * Validates and persists a ticket.
+     *
+     * @param ticket ticket to save
+     * @return persisted ticket
+     */
     @Transactional
     public Ticket saveTicket(Ticket ticket) {
         if (ticket.getConversation() == null || ticket.getConversation().getConversationId() == null) {
@@ -374,11 +493,23 @@ public class TicketService {
         return ticketRepository.save(ticket);
     }
 
+    /**
+     * Retrieves all tickets.
+     *
+     * @return all persisted tickets
+     */
     @Transactional(readOnly = true)
     public List<Ticket> getAllTickets() {
         return ticketRepository.findAll();
     }
 
+    /**
+     * Retrieves a ticket using its identifier.
+     *
+     * @param ticketId ticket identifier
+     * @return matching ticket
+     * @throws ResourceNotFoundException if the ticket does not exist
+     */
     @Transactional(readOnly = true)
     public Ticket getTicketById(Long ticketId) {
         return ticketRepository.findById(ticketId)
@@ -386,15 +517,23 @@ public class TicketService {
                         "Ticket not found with ID: " + ticketId));
     }
 
+    /**
+     * Deletes the specified ticket after confirming that it exists.
+     *
+     * @param ticketId ticket identifier
+     */
     @Transactional
     public void deleteTicket(Long ticketId) {
         getTicketById(ticketId);
         ticketRepository.deleteById(ticketId);
     }
 
-    /*
-     * Marks the ticket for human support and tries to assign an active agent automatically.
-     * The ticket can remain unassigned if there is no active agent available at the time.
+    /**
+     * Escalates a ticket for human support and attempts automatic
+     * assignment to an active support agent.
+     *
+     * @param ticketId ticket identifier
+     * @return escalated ticket
      */
     @Transactional
     public Ticket escalateTicket(Long ticketId) {
@@ -424,11 +563,21 @@ public class TicketService {
         return savedTicket;
     }
 
+    /**
+     * Retrieves tickets currently in the escalated state.
+     *
+     * @return escalated tickets
+     */
     @Transactional(readOnly = true)
     public List<Ticket> getEscalatedTickets() {
         return ticketRepository.findByStatusOrderByCreatedAtAsc(TicketStatus.ESCALATED);
     }
 
+    /**
+     * Retrieves tickets accessible to the currently authenticated staff user.
+     *
+     * @return ticket summaries accessible to the current staff member
+     */
     @Transactional(readOnly = true)
     public List<TicketSummaryResponse> getStaffTickets() {
         User current = userService.currentUser();
@@ -451,12 +600,26 @@ public class TicketService {
                 .toList();
     }
 
+    /**
+     * Assigns a ticket to the support agent identified by email.
+     *
+     * @param ticketId   ticket identifier
+     * @param agentEmail support agent email
+     * @return assigned ticket
+     */
     @Transactional
     public Ticket assignTicketToAgent(Long ticketId, String agentEmail) {
         User agent = requireSupportAgentByEmail(agentEmail);
         return assignTicket(ticketId, agent, agent);
     }
 
+    /**
+     * Assigns a ticket to a specific active support agent.
+     *
+     * @param ticketId ticket identifier
+     * @param agentId  support agent identifier
+     * @return updated ticket details
+     */
     @Transactional
     public TicketDetailsResponse assignTicketToSpecificAgent(Long ticketId, Long agentId) {
         User current = userService.currentUser();
@@ -478,7 +641,14 @@ public class TicketService {
         return details(assignTicket(ticketId, agent, current));
     }
 
-    // Confirms the selected user is an active agent before linking the agent to the ticket.
+    /**
+     * Assigns a ticket to the selected support agent and records the assignment.
+     *
+     * @param ticketId ticket identifier
+     * @param agent    agent receiving the ticket
+     * @param actor    user performing the assignment
+     * @return assigned ticket
+     */
     private Ticket assignTicket(Long ticketId, User agent, User actor) {
         Ticket ticket = getTicketById(ticketId);
         ticket.setAssignedAgent(agent);
@@ -501,6 +671,14 @@ public class TicketService {
         return savedTicket;
     }
 
+    /**
+     * Updates a ticket assigned to the authenticated support agent.
+     *
+     * @param ticketId   ticket identifier
+     * @param request    requested status and resolution changes
+     * @param agentEmail authenticated support agent email
+     * @return updated ticket
+     */
     @Transactional
     public Ticket updateAssignedTicket(
             Long ticketId,
@@ -520,6 +698,13 @@ public class TicketService {
         return ticketRepository.save(ticket);
     }
 
+    /**
+     * Updates ticket status using the currently authenticated staff user.
+     *
+     * @param ticketId ticket identifier
+     * @param request  requested ticket status information
+     * @return updated ticket details
+     */
     @Transactional
     public TicketDetailsResponse updateStatusByCurrentStaff(
             Long ticketId,
@@ -536,7 +721,15 @@ public class TicketService {
         return details(ticketRepository.save(ticket));
     }
 
-    // Updates resolved or closed timestamps when staff change the ticket status.
+    /**
+     * Applies a staff-requested status change and updates the appropriate
+     * ticket and conversation timestamps.
+     *
+     * @param ticket          ticket being updated
+     * @param status          requested ticket status
+     * @param resolutionNotes optional resolution notes
+     * @param actor           staff user performing the update
+     */
     private void applyStaffStatus(
             Ticket ticket,
             TicketStatus status,
@@ -582,7 +775,19 @@ public class TicketService {
                 ticket);
     }
 
-    // Saves the agent reply to the conversation and records the first human response time when needed.
+    /**
+     * Saves a response from the authenticated support agent.
+     *
+     * <p>
+     * The response is added to the ticket conversation and the first
+     * human-response timestamp is recorded when required.
+     * </p>
+     *
+     * @param ticketId   ticket identifier
+     * @param request    support-agent message request
+     * @param agentEmail authenticated support agent email
+     * @return persisted agent message
+     */
     @Transactional
     public Message sendAgentResponse(
             Long ticketId,
@@ -622,9 +827,19 @@ public class TicketService {
         return message;
     }
 
-    /*
-     * Saves a new ticket message only after checking customer ownership or staff access.
-     * The sender type is set from the logged-in user's role before the message is stored.
+    /**
+     * Adds a manual message to a ticket after validating access.
+     *
+     * <p>
+     * The sender type is derived from the authenticated user's role.
+     * Agent messages can update assignment and response information,
+     * while customer follow-up messages can reopen and escalate previously
+     * resolved tickets.
+     * </p>
+     *
+     * @param ticketId ticket identifier
+     * @param request  message request
+     * @return updated ticket details
      */
     @Transactional
     public TicketDetailsResponse addManualMessage(Long ticketId, TicketMessageRequest request) {
@@ -694,7 +909,15 @@ public class TicketService {
         return details(ticket);
     }
 
-    // Creates the ticket using the classification, priority, sentiment and confidence returned by AI.
+    /**
+     * Creates a ticket using the classification and analysis returned by AI.
+     *
+     * @param conversation associated conversation
+     * @param customer     customer who created the conversation
+     * @param title        ticket title
+     * @param result       AI analysis result
+     * @return persisted AI-created ticket
+     */
     private Ticket createAiTicket(
             Conversation conversation,
             User customer,
@@ -709,7 +932,12 @@ public class TicketService {
         return ticketRepository.save(ticket);
     }
 
-    // Refreshes the existing ticket with the latest AI classification and escalation result.
+    /**
+     * Applies the latest AI analysis values to a ticket.
+     *
+     * @param ticket ticket being updated
+     * @param result AI analysis result
+     */
     private void applyAiResult(Ticket ticket, AiResult result) {
         ticket.setCategory(result.category());
         ticket.setPriority(result.priority());
@@ -732,9 +960,11 @@ public class TicketService {
         }
     }
 
-    /*
-     * Records the AI decision in the system log for traceability.
-     * When human review is required, agent notifications are created as part of the same workflow.
+    /**
+     * Performs notification and logging operations after AI processing.
+     *
+     * @param ticket processed ticket
+     * @param result AI analysis result
      */
     private void afterAiProcessing(Ticket ticket, AiResult result) {
         if (ticket.isEscalated() && ticket.getAssignedAgent() != null) {
@@ -753,6 +983,13 @@ public class TicketService {
                 ticket);
     }
 
+    /**
+     * Converts a ticket and AI result into a chat response.
+     *
+     * @param ticket ticket associated with the chat
+     * @param result AI analysis result
+     * @return constructed chat response
+     */
     private ChatResponse chatResponse(Ticket ticket, AiResult result) {
         AiAnalysisResponse analysis = new AiAnalysisResponse(
                 result.category(),
@@ -770,12 +1007,24 @@ public class TicketService {
                 analysis);
     }
 
+    /**
+     * Builds complete ticket details including conversation messages.
+     *
+     * @param ticket ticket to convert
+     * @return complete ticket details
+     */
     private TicketDetailsResponse details(Ticket ticket) {
         List<Message> messages = messageService.getConversationMessages(
                 ticket.getConversation().getConversationId());
         return TicketDetailsResponse.from(ticket, messages);
     }
 
+    /**
+     * Updates conversation status based on the current ticket state.
+     *
+     * @param conversation conversation associated with the ticket
+     * @param ticket       ticket whose state determines the conversation status
+     */
     private void finishConversationFromTicket(Conversation conversation, Ticket ticket) {
         if (ticket.getStatus() == TicketStatus.RESOLVED_BY_AI
                 || ticket.getStatus() == TicketStatus.RESOLVED
@@ -787,6 +1036,12 @@ public class TicketService {
         }
     }
 
+    /**
+     * Creates a new active conversation for a customer.
+     *
+     * @param customer customer associated with the conversation
+     * @return persisted conversation
+     */
     private Conversation createConversation(User customer) {
         Conversation conversation = new Conversation();
         conversation.setCustomer(customer);
@@ -794,12 +1049,25 @@ public class TicketService {
         return conversationRepository.save(conversation);
     }
 
+    /**
+     * Retrieves a conversation by identifier.
+     *
+     * @param conversationId conversation identifier
+     * @return matching conversation
+     * @throws ResourceNotFoundException if the conversation does not exist
+     */
     private Conversation getConversation(Long conversationId) {
         return conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Conversation not found with ID: " + conversationId));
     }
 
+    /**
+     * Retrieves and validates a customer using an email address.
+     *
+     * @param email customer email
+     * @return validated customer
+     */
     private User requireCustomerByEmail(String email) {
         User customer = userRepository.findByEmailIgnoreCase(email.trim().toLowerCase())
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -807,6 +1075,12 @@ public class TicketService {
         return requireCustomer(customer);
     }
 
+    /**
+     * Verifies that the supplied user has the client role.
+     *
+     * @param user user to validate
+     * @return validated customer
+     */
     private User requireCustomer(User user) {
         if (user.getRole() != UserRole.CLIENT) {
             throw new ForbiddenOperationException("Customer access is required");
@@ -814,6 +1088,12 @@ public class TicketService {
         return user;
     }
 
+    /**
+     * Retrieves and validates an active support agent by email.
+     *
+     * @param email support agent email
+     * @return active support agent
+     */
     private User requireSupportAgentByEmail(String email) {
         User agent = userRepository.findByEmailIgnoreCase(email.trim().toLowerCase())
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -825,6 +1105,12 @@ public class TicketService {
         return agent;
     }
 
+    /**
+     * Verifies that a conversation belongs to the specified customer.
+     *
+     * @param conversation conversation to validate
+     * @param customer     authenticated customer
+     */
     private void assertCustomerOwnsConversation(Conversation conversation, User customer) {
         if (!conversation.getCustomer().getUserId().equals(customer.getUserId())) {
             throw new ForbiddenOperationException(
@@ -832,6 +1118,12 @@ public class TicketService {
         }
     }
 
+    /**
+     * Verifies that a ticket belongs to the specified customer.
+     *
+     * @param ticket   ticket to validate
+     * @param customer authenticated customer
+     */
     private void assertCustomerOwnsTicket(Ticket ticket, User customer) {
         if (!ticket.getCustomer().getUserId().equals(customer.getUserId())) {
             throw new ForbiddenOperationException(
@@ -839,7 +1131,18 @@ public class TicketService {
         }
     }
 
-    // Allows customers to access only their own tickets while staff can access tickets for support work.
+    /**
+     * Verifies whether the currently authenticated user may access a ticket.
+     *
+     * <p>
+     * Administrators may access all tickets, clients may access their own
+     * tickets, and agents may access unassigned tickets or tickets assigned
+     * to themselves.
+     * </p>
+     *
+     * @param ticket  ticket being accessed
+     * @param current authenticated user
+     */
     private void assertCanView(Ticket ticket, User current) {
         if (current.getRole() == UserRole.ADMIN) {
             return;
@@ -856,14 +1159,24 @@ public class TicketService {
         throw new ForbiddenOperationException("You do not have access to this ticket");
     }
 
-    // Uses the first active agent returned by the user service for automatic assignment.
+    /**
+     * Finds the first active support agent available for automatic assignment.
+     *
+     * @return active support agent, or {@code null} when none is available
+     */
     private User findFirstAvailableAgent() {
         return userRepository.findFirstByRoleAndStatusOrderByUserIdAsc(
-                        UserRole.AGENT,
-                        UserStatus.ACTIVE)
+                UserRole.AGENT,
+                UserStatus.ACTIVE)
                 .orElse(null);
     }
 
+    /**
+     * Sends the supplied ticket notification to all active support agents.
+     *
+     * @param ticket  ticket associated with the notification
+     * @param message notification message
+     */
     private void notifyActiveAgents(Ticket ticket, String message) {
         for (User agent : userRepository.findByRoleAndStatusOrderByNameAsc(
                 UserRole.AGENT,
@@ -872,6 +1185,14 @@ public class TicketService {
         }
     }
 
+    /**
+     * Returns a cleaned ticket title or the supplied fallback when no
+     * title is provided.
+     *
+     * @param title    requested title
+     * @param fallback fallback title
+     * @return normalized ticket title
+     */
     private String defaultTitle(String title, String fallback) {
         if (title == null || title.isBlank()) {
             return fallback;
@@ -880,19 +1201,44 @@ public class TicketService {
         return clean.length() <= 180 ? clean : clean.substring(0, 180);
     }
 
+    /**
+     * Generates a ticket title from a customer message.
+     *
+     * @param message customer message
+     * @return generated ticket title
+     */
     private String titleFrom(String message) {
         String clean = message.trim().replaceAll("\\s+", " ");
         return clean.length() <= 70 ? clean : clean.substring(0, 67) + "...";
     }
 
+    /**
+     * Returns the supplied category or the default general-inquiry category.
+     *
+     * @param category requested ticket category
+     * @return supplied or default category
+     */
     private TicketCategory defaultCategory(TicketCategory category) {
         return category == null ? TicketCategory.GENERAL_INQUIRY : category;
     }
 
+    /**
+     * Returns the supplied priority or the default medium priority.
+     *
+     * @param priority requested ticket priority
+     * @return supplied or default priority
+     */
     private TicketPriority defaultPriority(TicketPriority priority) {
         return priority == null ? TicketPriority.MEDIUM : priority;
     }
 
+    /**
+     * Returns the higher of the current and newly calculated ticket priorities.
+     *
+     * @param current current ticket priority
+     * @param next    newly calculated ticket priority
+     * @return higher priority
+     */
     private TicketPriority higherPriority(TicketPriority current, TicketPriority next) {
         if (current == null) {
             return next;
