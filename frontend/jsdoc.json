@@ -1,0 +1,18 @@
+{
+  "source": {
+    "include": ["src"],
+    "includePattern": ".+\\.(js|jsx)$",
+    "excludePattern": "(^|\\/)(test|tests)(\\/|$)|\\.test\\.(js|jsx)$"
+  },
+  "opts": {
+    "destination": "docs/jsdoc",
+    "recurse": true,
+    "encoding": "utf8"
+  },
+  "plugins": ["plugins/markdown"],
+  "templates": {
+    "default": {
+      "includeDate": false
+    }
+  }
+}
