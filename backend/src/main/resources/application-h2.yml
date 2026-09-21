@@ -1,0 +1,11 @@
+# Local H2 profile used for simple development without needing a separate MySQL server.
+spring:
+  config:
+    activate:
+      on-profile: h2
+
+  datasource:
+    url: ${H2_DB_URL:jdbc:h2:file:./data/supportdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE}
+    username: ${H2_DB_USERNAME:sa}
+    password: ${H2_DB_PASSWORD:}
+    driver-class-name: org.h2.Driver

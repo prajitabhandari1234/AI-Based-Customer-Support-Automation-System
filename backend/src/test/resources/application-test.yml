@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:supporttest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  h2:
+    console:
+      enabled: false
+
+app:
+  jwt:
+    secret: test-only-jwt-secret-that-is-at-least-sixty-four-characters-long-1234567890
+    expiration-minutes: 60
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+  ai:
+    provider: local
+    openai:
+      api-key: ""
+      model: gpt-5.6-luna
+      endpoint: http://127.0.0.1:9/v1/responses
+      connect-timeout-seconds: 1
+      request-timeout-seconds: 1
+  seed:
+    enabled: false

@@ -1,0 +1,17 @@
+# Build output and local runtime data are recreated inside Docker, so they are not sent as build context.
+target
+data
+
+# Local environment files may contain secrets and are not copied into the Docker build context.
+.env
+.env.*
+!.env.example
+
+# Git, IDE and OS-specific files are development-only and are not needed in the image.
+.git
+.gitignore
+.vscode
+.idea
+*.iml
+.DS_Store
+ENDPOINT_AUDIT.json
