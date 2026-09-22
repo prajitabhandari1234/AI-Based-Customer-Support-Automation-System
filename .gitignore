@@ -1,14 +1,10 @@
-# Maven
-target/
-!.mvn/wrapper/maven-wrapper.jar
-
-# VS Code
-.vscode/
-
-# Environment variables
+# Local environment files and secrets
 .env
-application-local.properties
+**/.env
+**/.env.*
+!**/.env.example
 
-# Operating System
+# Operating-system metadata
 .DS_Store
 **/.DS_Store
+__MACOSX/

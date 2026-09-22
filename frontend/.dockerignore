@@ -4,6 +4,12 @@ coverage
 docs/jsdoc
 playwright-report
 test-results
+
+# Local Vite environment files are not baked into the production image.
+.env
+.env.*
+!.env.example
+
 .git
 .gitignore
 .DS_Store

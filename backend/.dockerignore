@@ -14,4 +14,3 @@ data
 .idea
 *.iml
 .DS_Store
-ENDPOINT_AUDIT.json

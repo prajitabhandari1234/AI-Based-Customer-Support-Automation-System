@@ -5,7 +5,7 @@ spring:
       on-profile: mysql
 
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ai_customer_support}?createDatabaseIfNotExist=${MYSQL_CREATE_DATABASE:true}&useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=${MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:true}&serverTimezone=${MYSQL_SERVER_TIMEZONE:UTC}
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ai_customer_support}?createDatabaseIfNotExist=${MYSQL_CREATE_DATABASE:true}&sslMode=${MYSQL_SSL_MODE:DISABLED}&allowPublicKeyRetrieval=${MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:true}&serverTimezone=${MYSQL_SERVER_TIMEZONE:UTC}
     username: ${MYSQL_USER:support}
     password: ${MYSQL_PASSWORD:support}
     driver-class-name: com.mysql.cj.jdbc.Driver
