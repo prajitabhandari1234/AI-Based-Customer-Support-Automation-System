@@ -100,6 +100,11 @@ export async function api(path, options = {}) {
 export const authApi = {
   login: async (body) => normalizeLoginResponse(await api('/api/auth/login', { method: 'POST', body: JSON.stringify(body) })),
   register: async (body) => normalizeLoginResponse(await api('/api/auth/register', { method: 'POST', body: JSON.stringify(body) })),
+  forgotPassword: (body) =>
+  api('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }),
   me: async () => normalizeUser(await api('/api/auth/me'))
 }
 

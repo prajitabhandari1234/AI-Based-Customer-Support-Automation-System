@@ -513,7 +513,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--teal); box-shado
 
 .alert { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; margin-bottom: 1rem; border-radius: .75rem; font-size: .85rem; }
 .alert-error { color: #8c1b13; border: 1px solid #fecdca; background: #fff1f0; }
-
+.alert-success {
+  color: var(--success);
+  border: 1px solid #abefc6;
+  background: #ecfdf3;
+}
 .chat-layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(18rem, .65fr); gap: 1rem; align-items: start; }
 .chat-panel { overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: #fff; box-shadow: var(--shadow); }
 .chat-header { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.2rem; border-bottom: 1px solid var(--line); }

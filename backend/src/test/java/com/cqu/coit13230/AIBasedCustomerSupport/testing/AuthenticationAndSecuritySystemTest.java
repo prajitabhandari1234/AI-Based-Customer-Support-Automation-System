@@ -172,4 +172,45 @@ class AuthenticationAndSecuritySystemTest extends AbstractSystemTest {
         HttpResponse<String> blocked = client.send(blockedRequest, HttpResponse.BodyHandlers.ofString());
         assertTrue(blocked.statusCode() >= 400 || blocked.headers().firstValue("access-control-allow-origin").isEmpty());
     }
+
+    @Test
+    void forgotPasswordReturnsSuccessForExistingEmailAndNotFoundForUnknownEmail()
+            throws Exception {
+
+        ApiResponse existing = post(
+                "/api/auth/forgot-password",
+                null,
+                Map.of("email", "CLIENT1@TEST.LOCAL"));
+
+        assertEquals(200, existing.status());
+
+        assertEquals(
+                "Password reset link is sent via email",
+                existing.json().path("message").asText());
+
+        ApiResponse missing = post(
+                "/api/auth/forgot-password",
+                null,
+                Map.of("email", "missing@example.com"));
+
+        assertEquals(404, missing.status());
+
+        assertEquals(
+                "Email not found",
+                missing.json().path("message").asText());
+    }
+
+    @Test
+    void forgotPasswordValidatesEmailFormat() throws Exception {
+
+        ApiResponse response = post(
+                "/api/auth/forgot-password",
+                null,
+                Map.of("email", "not-an-email"));
+
+        assertEquals(400, response.status());
+
+        assertTrue(
+                response.json().has("validationErrors"));
+    }
 }

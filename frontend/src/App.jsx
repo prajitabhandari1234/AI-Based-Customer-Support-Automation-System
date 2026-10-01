@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage'
 import NewTicketPage from './pages/NewTicketPage'
 import NotFoundPage from './pages/NotFoundPage'
 import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import StaffDashboard from './pages/StaffDashboard'
 import SystemLogsPage from './pages/SystemLogsPage'
 import TicketDetailPage from './pages/TicketDetailPage'
@@ -36,6 +37,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password"  element={<ForgotPasswordPage />} />
 
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<HomeRoute />} />

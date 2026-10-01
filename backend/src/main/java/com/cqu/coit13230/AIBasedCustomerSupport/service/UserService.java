@@ -22,6 +22,8 @@ import com.cqu.coit13230.AIBasedCustomerSupport.dto.RegisterRequest;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.UpdateUserRequest;
 
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.ForgotPasswordRequest;
+
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.AccountInactiveException;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.exception.AuthenticationException;
@@ -203,6 +205,33 @@ public class UserService {
         systemLogService.logLoginSuccess(user);
 
         return LoginResponse.from(user, token, "Login successful");
+
+    }
+
+    /**
+     * Checks whether the supplied email belongs to an existing account.
+     *
+     * <p>
+     * This project version does not send a real email. It only confirms
+     * that the account exists before returning the simulated reset-link
+     * confirmation message.
+     * </p>
+     *
+     * @param request password reset request containing the email address
+     * @throws ResourceNotFoundException if no account uses the supplied email
+     */
+    public void requestPasswordReset(ForgotPasswordRequest request) {
+
+        String email = normalizeEmail(request.getEmail());
+
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Email not found"));
+
+        systemLogService.logEvent(
+                "PASSWORD_RESET_REQUESTED",
+                "Password reset requested",
+                user,
+                null);
 
     }
 

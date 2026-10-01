@@ -93,6 +93,7 @@ public class SecurityConfig {
                                                 .requestMatchers(
                                                                 "/api/auth/login",
                                                                 "/api/auth/register",
+                                                                "/api/auth/forgot-password",
                                                                 "/actuator/health",
                                                                 "/actuator/info",
                                                                 "/h2-console/**")

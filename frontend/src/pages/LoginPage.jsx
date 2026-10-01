@@ -103,6 +103,12 @@ export default function LoginPage() {
             />
           </label>
 
+          <p className="auth-switch">
+            <Link to="/forgot-password">
+              Forgot password?
+            </Link>
+          </p>
+
           <button
             className="button button-primary button-full"
             type="submit"

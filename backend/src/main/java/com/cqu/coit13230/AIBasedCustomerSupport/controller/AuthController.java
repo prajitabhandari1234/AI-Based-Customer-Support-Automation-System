@@ -7,10 +7,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.LoginResponse;
 import com.cqu.coit13230.AIBasedCustomerSupport.dto.RegisterRequest;
+import com.cqu.coit13230.AIBasedCustomerSupport.dto.ForgotPasswordRequest;
 import com.cqu.coit13230.AIBasedCustomerSupport.model.User;
 import com.cqu.coit13230.AIBasedCustomerSupport.service.UserService;
 
@@ -103,6 +105,29 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request) {
 
         return ResponseEntity.ok(userService.authenticateUser(request));
+
+    }
+
+    /**
+     * Checks whether an account exists for the supplied email address.
+     *
+     * <p>
+     * No real reset email is sent in this project version. The endpoint
+     * only simulates the reset request after confirming that the supplied
+     * email belongs to an existing account.
+     * </p>
+     *
+     * @param request validated password reset request
+     * @return confirmation message when the email belongs to an account
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+
+        userService.requestPasswordReset(request);
+
+        return ResponseEntity.ok(
+                Map.of("message", "Password reset link is sent via email"));
 
     }
 
